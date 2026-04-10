@@ -29,19 +29,20 @@ float get_h(float t, float d, float g, float l, float m, float v0){
 }
 
 int main(){
-  std::ifstream file("input.txt");
-  std::float_t xd;
-  std::float_t yd;
-  std::float_t zd;
-  std::float_t targetX;
-  std::float_t targetY;
-  std::float_t v0;
-  std::float_t accelerationPath;
-  
-  char ammo_name[12];
 
-  file >> xd >> yd >> zd >> targetX >> targetY >> v0 >> accelerationPath >> ammo_name;
-  file.close();
+  std::ifstream input("input.txt");
+
+  float xd;
+  float yd;
+  float zd;
+  float targetX;
+  float targetY;
+  float v0;
+  float accelerationPath;
+  char ammo_name[12];
+  
+  input >> xd >> yd >> zd >> targetX >> targetY >> v0 >> accelerationPath >> ammo_name;
+  input.close();
 
   float m; // ammoMass
   float d; // coeffAero
@@ -79,19 +80,17 @@ if (strcmp(ammo_name, "VOG-17") == 0) {
   float p = -pow(b, 2) / (3 * pow(a, 2));
   float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
 
-  float angle = 3 * q / (2 * p) * sqrt(-3 / p);
+  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
 
-  if(angle > 1.0f || angle < -1.0f){
+  if(angCos > 1.0f || angCos < -1.0f){
     return 1;
   }
 
-  float fi = acos(angle);
+  float fi = acos(angCos);
   
   float t = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
-
   float h = get_h(t, d, g, l, m, v0);
-
-  float D = sqrt(pow(targetX - xd, 2) + pow(targetY - yd, 2));
+  float D = sqrt(pow(targetX - xd, 2) + pow(targetY - yd, 2)); // Distance from drone to target
 
   bool shouldMakeManeuver = h + accelerationPath > D;
 
@@ -104,7 +103,9 @@ if (strcmp(ammo_name, "VOG-17") == 0) {
   float fireY = valid_yd + (targetY - valid_yd) * ratio;
 
   
- std::cout << "fireX = " << fireX <<", "<< "fireY = " << fireY<< std::endl;
+ std::ofstream output("output.txt");
+ output << fireX << ' ' << fireY << std::endl;
+ output.close();
 
   return 0;
 }
