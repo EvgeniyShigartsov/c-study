@@ -4,6 +4,7 @@
 
 float get_h(float t, float d, float g, float l, float m, float v0){
     float l2 = pow(l, 2);
+    float l2p1 = l2 + 1;
 
     float term1 =
         (pow(t, 3) * (6 * d * g * l * m - 6 * pow(d, 2) * (l2 - 1) * v0))
@@ -11,17 +12,17 @@ float get_h(float t, float d, float g, float l, float m, float v0){
         (36 * pow(m, 2));
 
     float term2 = 
-     (pow(t, 5) * (3 * pow(d, 3) * g * pow(l, 3) * m - 3 * pow(d, 4) * l2 * (l2 + 1) * v0))
+     (pow(t, 5) * (3 * pow(d, 3) * g * pow(l, 3) * m - 3 * pow(d, 4) * l2 * l2p1 * v0))
      /
-     (36 * (l2 + 1) * pow(m, 4));
+     (36 * l2p1 * pow(m, 4));
 
      float term3 = 
      (pow(t, 4) *
-        (3 * pow(d, 3) * (l2 + 1) * l2 * v0 + 6 * pow(d, 3) * (l2 + 1) * pow(l, 4) * v0 
-        - 6 * pow(d, 2) * g * (pow(l, 4) + l2 + 1) * l * m)
+        (3 * pow(d, 3) * (l2p1) * l2 * v0 + 6 * pow(d, 3) * l2p1 * pow(l, 4) * v0 
+        - 6 * pow(d, 2) * g * (pow(l, 4) + l2p1) * l * m)
     )
      /
-     (36 * pow(l2 + 1, 2) * pow(m, 3));
+     (36 * pow(l2p1, 2) * pow(m, 3));
 
      float term4 = (d * pow(t, 2) * v0) / (m * 2);
 
