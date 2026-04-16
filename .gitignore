@@ -3,5 +3,7 @@ cMiltech_hardware_list.xlsx
 .DS_Store
 
 input.txt
+simulation.txt
+targets.txt
 output.txt
 script.out
