@@ -4,6 +4,13 @@
 
 float get_h(float t, float d, float g, float l, float m, float v0);
 
+const int BOMBS_COUNT = 5;
+const int BOMB_CHAR_COUNT = 12;
+const char bombNames[BOMBS_COUNT][BOMB_CHAR_COUNT] =  {"VOG-17", "M67", "RKG-3", "GLIDING-VOG", "GLIDING-RKG"};
+const float bombM[BOMBS_COUNT] = {0.35f, 0.6f, 1.2f, 0.45f, 1.4f};
+const float bombD[BOMBS_COUNT] = {0.07f, 0.10f, 0.10f, 0.10f, 0.10f};
+const float bombL[BOMBS_COUNT] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
+
 const int MAX_STEPS = 10000;
 const int TARGETS_COUNT = 5;
 const int TARGET_MOVES_COUNT = 60;
@@ -13,93 +20,79 @@ enum DroneState { STOPPED, ACCELERATING, DECELERATING, TURNING, MOVING };
 int main(){
 
   std::ifstream input("input.txt");
+  std::ifstream targets("targets.txt");
 
+  if (!input.is_open() || !targets.is_open()) {
+    std::cout << "input.txt or targets.txt not found." << std::endl;
+    return 1;
+  }
+  
   float xd;
   float yd;
   float zd;
-  float targetX;
-  float targetY;
+  float initialDir;
   float v0;
   float accelerationPath;
-  char ammo_name[12];
+  char ammo_name[BOMB_CHAR_COUNT];
+  float arrayTimeStep;
+  float simTimeStep;
+  float hitRadius;
+  float angularSpeed;
+  float turnThreshold;
   
-  input >> xd >> yd >> zd >> targetX >> targetY >> v0 >> accelerationPath >> ammo_name;
+  input >> xd >> yd >> zd >> initialDir >> v0 >> accelerationPath >> ammo_name >> arrayTimeStep
+  >> simTimeStep >> hitRadius >> angularSpeed >> turnThreshold;
   input.close();
+
+   if(input.fail()){
+    std::cout << "input.txt has incorrect data format." << std::endl;
+    return 1;
+  }
 
   float m; // ammoMass
   float d; // coeffAero
   float l; // liftForce
-  float g = 9.81f; // gravity
+  const float g = 9.81f; // gravity
 
-if (strcmp(ammo_name, "VOG-17") == 0) {
-    m = 0.35;
-    d = 0.07;
-    l = 0.0;
-} else if (strcmp(ammo_name, "M67") == 0) {
-    m = 0.6;
-    d = 0.10;
-    l = 0.0;
-} else if (strcmp(ammo_name, "RKG-3") == 0) {
-    m = 1.2;
-    d = 0.10;
-    l = 0.0;
-} else if (strcmp(ammo_name, "GLIDING-VOG") == 0) {
-    m = 0.45;
-    d = 0.10;
-    l = 1.0;
-} else if (strcmp(ammo_name, "GLIDING-RKG") == 0) {
-    m = 1.4;
-    d = 0.10;
-    l = 1.0;
-} else {
-    std::cerr << "Invalid ammo_name: " << ammo_name << std::endl;
-    return 1;
-}
+  float targetXInTime[TARGETS_COUNT][TARGET_MOVES_COUNT] = {};
+  float targetYInTime[TARGETS_COUNT][TARGET_MOVES_COUNT] = {};
 
-  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
-  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
-  float c = (6 * pow(m, 2)) * zd;
 
-  float p = -pow(b, 2) / (3 * pow(a, 2));
-  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
-
-  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
-
-  if(angCos > 1.0f || angCos < -1.0f){
-    std::cerr << "arccos is out -1...1, value is: " << angCos << std::endl;
-    return 1;
+  for (int i = 0; i < BOMBS_COUNT; i++){
+    if(strcmp(ammo_name, bombNames[i]) == 0){
+      m = bombM[i];
+      d = bombD[i];
+      l = bombL[i];
+      break;
+    }
+    if(i == BOMBS_COUNT - 1){
+      std::cerr << "Invalid ammo_name: " << ammo_name << std::endl;
+      return 1;
+    }
   }
 
-  float fi = acos(angCos);
-  
-  float t = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
-  float h = get_h(t, d, g, l, m, v0);
-
-  if(xd == targetX){
-    xd = targetX - (h + accelerationPath);
+  for (int i = 0; i < TARGETS_COUNT; i++){
+    for (int x = 0; x < TARGET_MOVES_COUNT; x++){
+      targets >> targetXInTime[i][x];
+    }
+  }
+  for(int i = 0; i < TARGETS_COUNT; i++){
+    for(int y = 0; y < TARGET_MOVES_COUNT; y++){
+      targets >> targetYInTime[i][y];
+    }
   }
 
-  float D = sqrt(pow(targetX - xd, 2) + pow(targetY - yd, 2)); // Distance from drone to target
+  targets.close();
 
-  bool shouldMakeManeuver = h + accelerationPath > D;
-
-  float valid_xd = shouldMakeManeuver ? targetX - (targetX - xd) * (h + accelerationPath) / D : xd;
-  float valid_yd = shouldMakeManeuver ? targetY - (targetY - yd) * (h + accelerationPath) / D : yd;
-  float valid_D = shouldMakeManeuver ? sqrt(pow(targetX - valid_xd, 2) + pow(targetY - valid_yd, 2)) : D;
-
-  std::ofstream output("output.txt");
-
-  if(shouldMakeManeuver) {
-    output << valid_xd << ' ' << valid_yd << ' ';
+  if(targets.fail()){
+    std::cout << "targets.txt has incorrect data format." << std::endl;
   }
 
-  float ratio = (valid_D - h) / valid_D;
+  std::ofstream simulation("simulation.txt");
 
-  float fireX = valid_xd + (targetX - valid_xd) * ratio;
-  float fireY = valid_yd + (targetY - valid_yd) * ratio;
 
- output << fireX << ' ' << fireY << std::endl;
- output.close();
+ simulation << 0 << ' ' << 0 << std::endl;
+ simulation.close();
 
   return 0;
 }
