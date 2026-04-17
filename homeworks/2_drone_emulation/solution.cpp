@@ -102,6 +102,10 @@ bool setBombParams (const char ammo_name[BOMB_CHAR_COUNT], float& out_m, float& 
   return true;
 }
 
+float interpolateCoord (const float frac, const float currentTargetPos, const float nextTargetPos){
+     return currentTargetPos + (nextTargetPos - currentTargetPos) * frac;
+}
+
 int main(){
 
   float xd;
@@ -155,13 +159,38 @@ int main(){
 
   float fi = acos(angCos);
   
-  float t = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
-  float h = get_h(t, d, g, l, m, v0);
+  float bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
+  float h = get_h(bombFlightTime, d, g, l, m, v0);
 
   std::ofstream simulation("simulation.txt");
 
+  int step = 0;
+  bool reachedFirePoint = false;
+  float t = 0.0f;
 
- simulation << 0 << ' ' << 0 << std::endl;
+  // while (step <= MAX_STEPS && !reachedFirePoint){
+  while (step <= 10 && !reachedFirePoint) {
+      step++;
+
+      simulation << step << ' ';
+      
+      int idx = (int)(floor(t / arrayTimeStep)) % TARGET_MOVES_COUNT;
+      int next = (idx + 1) % TARGET_MOVES_COUNT;
+      float frac = (t - idx * arrayTimeStep) / arrayTimeStep;
+
+      for(int i = 0; i < TARGETS_COUNT; i++){
+        float x = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
+        float y = interpolateCoord(frac, targetYInTime[i][idx], targetYInTime[i][next]);
+
+
+        if(i == 0){
+          std::cout << x << ' ' << y << std::endl;
+        }
+      }
+
+      t+= simTimeStep;
+  }
+
  simulation.close();
 
   return 0;
