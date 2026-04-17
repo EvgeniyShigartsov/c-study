@@ -17,12 +17,44 @@ const int TARGET_MOVES_COUNT = 60;
 
 enum DroneState { STOPPED, ACCELERATING, DECELERATING, TURNING, MOVING };
 
+bool readInput (
+  float& out_xd,
+  float& out_yd,
+  float& out_zd,
+  float& out_initialDir,
+  float& out_v0,
+  float& out_accelerationPath,
+  char out_ammo_name[BOMB_CHAR_COUNT],
+  float& out_arrayTimeStep,
+  float& out_simTimeStep,
+  float& out_hitRadius,
+  float& out_angularSpeed,
+  float& out_turnThreshold
+) {
+   std::ifstream input("input.txt");
+
+    if (!input.is_open()) {
+    std::cout << "input.txt not found." << std::endl;
+    return false;
+  }
+
+  input >> out_xd >> out_yd >> out_zd >> out_initialDir >> out_v0 >> out_accelerationPath >> out_ammo_name
+  >> out_arrayTimeStep >> out_simTimeStep >> out_hitRadius >> out_angularSpeed >> out_turnThreshold;
+  input.close();
+
+   if(input.fail()){
+    std::cout << "input.txt has incorrect data format." << std::endl;
+    return false;
+  }
+
+  return true;
+};
+
 int main(){
 
-  std::ifstream input("input.txt");
   std::ifstream targets("targets.txt");
 
-  if (!input.is_open() || !targets.is_open()) {
+  if (!targets.is_open()) {
     std::cout << "input.txt or targets.txt not found." << std::endl;
     return 1;
   }
@@ -39,16 +71,13 @@ int main(){
   float hitRadius;
   float angularSpeed;
   float turnThreshold;
+
+  if(!readInput(
+    xd, yd, zd, initialDir, v0, accelerationPath, ammo_name, arrayTimeStep, simTimeStep, hitRadius,
+    angularSpeed, turnThreshold)){
+      return 1;
+    }
   
-  input >> xd >> yd >> zd >> initialDir >> v0 >> accelerationPath >> ammo_name >> arrayTimeStep
-  >> simTimeStep >> hitRadius >> angularSpeed >> turnThreshold;
-  input.close();
-
-   if(input.fail()){
-    std::cout << "input.txt has incorrect data format." << std::endl;
-    return 1;
-  }
-
   float m; // ammoMass
   float d; // coeffAero
   float l; // liftForce
