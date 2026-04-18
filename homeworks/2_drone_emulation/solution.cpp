@@ -143,12 +143,14 @@ int main(){
     return 1;
   }
 
-  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
+  // ==== from HM-1 start
+
+  float bombA = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
   float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
   float c = (6 * pow(m, 2)) * zd;
 
-  float p = -pow(b, 2) / (3 * pow(a, 2));
-  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
+  float p = -pow(b, 2) / (3 * pow(bombA, 2));
+  float q = (2 * pow(b, 3)) / (27 * pow(bombA, 3)) + c / bombA;
 
   float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
 
@@ -159,14 +161,18 @@ int main(){
 
   float fi = acos(angCos);
   
-  float bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
+  float bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * bombA);
   float h = get_h(bombFlightTime, d, g, l, m, v0);
+
+  // ==== from HM-1 end
 
   std::ofstream simulation("simulation.txt");
 
   int step = 0;
   bool reachedFirePoint = false;
   float t = 0.0f;
+
+  float a = pow(v0, 2) / (2 * accelerationPath); // droneAcceleration
 
   // while (step <= MAX_STEPS && !reachedFirePoint){
   while (step <= 10 && !reachedFirePoint) {
@@ -181,6 +187,19 @@ int main(){
       for(int i = 0; i < TARGETS_COUNT; i++){
         float x = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
         float y = interpolateCoord(frac, targetYInTime[i][idx], targetYInTime[i][next]);
+
+        int idxNext = (int)(floor((t + simTimeStep) / arrayTimeStep)) % TARGET_MOVES_COUNT;
+        int nextNext = (idxNext + 1) % TARGET_MOVES_COUNT;
+        float fracNext =  (t + simTimeStep - idxNext * arrayTimeStep) / arrayTimeStep;
+
+        float xNext = interpolateCoord(fracNext, targetXInTime[i][idxNext], targetXInTime[i][nextNext]);
+        float yNext = interpolateCoord(fracNext, targetYInTime[i][idxNext], targetYInTime[i][nextNext]);
+
+        float dx = xNext - x;
+        float dy = yNext - y;
+
+        float targetVx = dx / simTimeStep;
+        float targetVy = dy / simTimeStep;
 
 
         if(i == 0){
