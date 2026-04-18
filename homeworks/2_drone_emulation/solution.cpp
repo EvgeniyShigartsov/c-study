@@ -106,6 +106,43 @@ float interpolateCoord (const float frac, const float currentTargetPos, const fl
      return currentTargetPos + (nextTargetPos - currentTargetPos) * frac;
 }
 
+void setInterpolationIndex (
+  const float t, const float arrayTimeStep,
+  int& out_idx, int& out_next, float& out_frac
+  ){
+    out_idx = (int)(floor(t / arrayTimeStep)) % TARGET_MOVES_COUNT;
+    out_next = (out_idx + 1) % TARGET_MOVES_COUNT;
+    out_frac = (t - out_idx * arrayTimeStep) / arrayTimeStep;
+}
+
+float calcDistance (const float targetX, const float targetY, const float droneX, const float droneY){
+  return sqrt(pow(targetX - droneX, 2) + pow(targetY - droneY, 2));
+}
+
+void setFirePoint (
+  const float targetX, const float targetY, const float xd, const float yd,
+  const float h, const float accelerationPath,
+  float& out_fireX, float& out_fireY
+){
+  
+  float D = calcDistance(targetX, targetY, xd, yd); // Distance from drone to target
+
+  if(D == 0){
+    D = calcDistance(targetX, targetY, targetX - (h + accelerationPath), yd);
+  }
+
+  bool shouldMakeManeuver = h + accelerationPath > D;
+
+  float valid_xd = shouldMakeManeuver ? targetX - (targetX - xd) * (h + accelerationPath) / D : xd;
+  float valid_yd = shouldMakeManeuver ? targetY - (targetY - yd) * (h + accelerationPath) / D : yd;
+  float valid_D = shouldMakeManeuver ? calcDistance(targetX, targetY, valid_xd, valid_yd) : D;
+
+  float ratio = (valid_D - h) / valid_D;
+
+  out_fireX = valid_xd + (targetX - valid_xd) * ratio;
+  out_fireY = valid_yd + (targetY - valid_yd) * ratio;
+}
+
 int main(){
 
   float xd;
@@ -171,6 +208,8 @@ int main(){
   int step = 0;
   bool reachedFirePoint = false;
   float t = 0.0f;
+  float droneX = xd;
+  float droneY = yd;
 
   float a = pow(v0, 2) / (2 * accelerationPath); // droneAcceleration
 
@@ -180,30 +219,45 @@ int main(){
 
       simulation << step << ' ';
       
-      int idx = (int)(floor(t / arrayTimeStep)) % TARGET_MOVES_COUNT;
-      int next = (idx + 1) % TARGET_MOVES_COUNT;
-      float frac = (t - idx * arrayTimeStep) / arrayTimeStep;
+      int idx, next;
+      float frac;
+      setInterpolationIndex(t, arrayTimeStep, idx, next, frac);
+
 
       for(int i = 0; i < TARGETS_COUNT; i++){
-        float x = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
-        float y = interpolateCoord(frac, targetYInTime[i][idx], targetYInTime[i][next]);
+        float currentTargetX = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
+        float currentTargetY = interpolateCoord(frac, targetYInTime[i][idx], targetYInTime[i][next]);
 
-        int idxNext = (int)(floor((t + simTimeStep) / arrayTimeStep)) % TARGET_MOVES_COUNT;
-        int nextNext = (idxNext + 1) % TARGET_MOVES_COUNT;
-        float fracNext =  (t + simTimeStep - idxNext * arrayTimeStep) / arrayTimeStep;
+        int idxNext, nextNext;
+        float fracNext;
+        setInterpolationIndex(t + simTimeStep, arrayTimeStep, idxNext, nextNext, fracNext);
 
         float xNext = interpolateCoord(fracNext, targetXInTime[i][idxNext], targetXInTime[i][nextNext]);
         float yNext = interpolateCoord(fracNext, targetYInTime[i][idxNext], targetYInTime[i][nextNext]);
 
-        float dx = xNext - x;
-        float dy = yNext - y;
+        float dx = xNext - currentTargetX;
+        float dy = yNext - currentTargetY;
 
         float targetVx = dx / simTimeStep;
         float targetVy = dy / simTimeStep;
 
+        float currentFireX, currentFireY;
+        setFirePoint(currentTargetX, currentTargetY, droneX, droneY, h, accelerationPath, currentFireX, currentFireY);
+
+        float timeToCurrentFire = calcDistance(currentFireX, currentFireY, droneX, droneY) / v0 + bombFlightTime;
+
+        float predictedX = currentTargetX + targetVx * timeToCurrentFire;
+        float predictedY = currentTargetY + targetVy * timeToCurrentFire;
+
+        float predictedFireX, predictedFireY;
+        setFirePoint(predictedX, predictedY, droneX, droneY, h, accelerationPath, predictedFireX, predictedFireY);
+
+        float timeToPredictedFire = calcDistance(predictedFireX, predictedFireY, droneX, droneY) / v0 + bombFlightTime;
 
         if(i == 0){
-          std::cout << x << ' ' << y << std::endl;
+          std::cout <<
+          calcDistance(currentFireX, currentFireY, droneX, droneY) <<
+          ' ' << timeToCurrentFire << std::endl;
         }
       }
 
