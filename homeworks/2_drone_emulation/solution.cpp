@@ -223,6 +223,10 @@ int main(){
       float frac;
       setInterpolationIndex(t, arrayTimeStep, idx, next, frac);
 
+      float bestTime = -1;
+      int bestTarget = 0;
+      float bestFireX, bestFireY;
+
 
       for(int i = 0; i < TARGETS_COUNT; i++){
         float currentTargetX = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
@@ -254,10 +258,17 @@ int main(){
 
         float timeToPredictedFire = calcDistance(predictedFireX, predictedFireY, droneX, droneY) / v0 + bombFlightTime;
 
+        if(bestTime == -1 || timeToPredictedFire < bestTime){
+          bestTime = timeToPredictedFire;
+          bestTarget = i;
+          bestFireX = predictedFireX;
+          bestFireY = predictedFireY;
+        }
+
         if(i == 0){
           std::cout <<
-          calcDistance(currentFireX, currentFireY, droneX, droneY) <<
-          ' ' << timeToCurrentFire << std::endl;
+           calcDistance(predictedFireX, predictedFireY, droneX, droneY) <<
+          ' ' << timeToPredictedFire << std::endl;
         }
       }
 
