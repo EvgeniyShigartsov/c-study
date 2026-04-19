@@ -319,6 +319,8 @@ int main(){
       if(deltaAngle > turnThreshold) {
         if(CURRENT_STATE == MOVING || CURRENT_STATE == ACCELERATING) CURRENT_STATE = DECELERATING;
         else if(CURRENT_STATE == STOPPED) CURRENT_STATE = TURNING;
+      } else {
+        CURRENT_DIR = dirToFire;
       }
 
       // Оновлення координати, швидкість та стан дрона відповідно до поточної фази
