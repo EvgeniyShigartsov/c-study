@@ -318,7 +318,10 @@ int main(){
 
       if(deltaAngle > turnThreshold) {
         if(CURRENT_STATE == MOVING || CURRENT_STATE == ACCELERATING) CURRENT_STATE = DECELERATING;
-        else if(CURRENT_STATE == STOPPED) CURRENT_STATE = TURNING;
+        else if(CURRENT_STATE == STOPPED) {
+          CURRENT_STATE = TURNING;
+          turningTimeLeft = deltaAngle / angularSpeed;
+        }
       } else {
         CURRENT_DIR = dirToFire;
       }
@@ -337,7 +340,6 @@ int main(){
         }
       } else if (CURRENT_STATE == STOPPED){
         if(deltaAngle > turnThreshold){
-          turningTimeLeft = deltaAngle / angularSpeed;
           CURRENT_STATE = TURNING;
         } else {
           CURRENT_STATE = ACCELERATING;
