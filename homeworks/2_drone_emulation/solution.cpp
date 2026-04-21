@@ -2,8 +2,6 @@
 #include <iostream>
 #include <fstream>
 
-float get_h(float t, float d, float g, float l, float m, float v0);
-
 const int BOMBS_COUNT = 5;
 const int BOMB_CHAR_COUNT = 12;
 
@@ -102,6 +100,60 @@ bool setBombParams (const char ammo_name[BOMB_CHAR_COUNT], float& out_m, float& 
   return true;
 }
 
+float get_h(float t, float d, float g, float l, float m, float v0){
+    float l2 = pow(l, 2);
+    float l2p1 = l2 + 1;
+
+    float term1 =
+        (pow(t, 3) * (6 * d * g * l * m - 6 * pow(d, 2) * (l2 - 1) * v0))
+        /
+        (36 * pow(m, 2));
+
+    float term2 = 
+     (pow(t, 5) * (3 * pow(d, 3) * g * pow(l, 3) * m - 3 * pow(d, 4) * l2 * l2p1 * v0))
+     /
+     (36 * l2p1 * pow(m, 4));
+
+     float term3 = 
+     (pow(t, 4) *
+        (3 * pow(d, 3) * (l2p1) * l2 * v0 + 6 * pow(d, 3) * l2p1 * pow(l, 4) * v0 
+        - 6 * pow(d, 2) * g * (pow(l, 4) + l2p1) * l * m)
+    )
+     /
+     (36 * pow(l2p1, 2) * pow(m, 3));
+
+     float term4 = (d * pow(t, 2) * v0) / (m * 2);
+
+
+    return term1 + term2 + term3 - term4 + (t * v0);
+}
+
+bool setBombFlightTime (
+  const float d, const float g, const float m,
+  const float l, const float v0, const float zd,
+  float& out_bombFlightTime
+){
+  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
+  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
+  float c = (6 * pow(m, 2)) * zd;
+
+  float p = -pow(b, 2) / (3 * pow(a, 2));
+  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
+
+  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
+
+  if(angCos > 1.0f || angCos < -1.0f){
+    std::cerr << "arccos is out -1...1, value is: " << angCos << std::endl;
+    return false;
+  }
+
+  float fi = acos(angCos);
+  
+  out_bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
+
+  return true;
+}
+
 float interpolateCoord (const float frac, const float currentTargetPos, const float nextTargetPos){
      return currentTargetPos + (nextTargetPos - currentTargetPos) * frac;
 }
@@ -144,6 +196,29 @@ void setFirePoint (
   out_fireY = valid_yd + (targetY - valid_yd) * ratio;
 }
 
+void writeSimulation (
+  const float droneXHistory[MAX_STEPS], const float droneYHistory[MAX_STEPS],
+  const float droneDirHistory[MAX_STEPS], const DroneState droneStateHistory[MAX_STEPS],
+  const int droneSelectedTargetHistory[MAX_STEPS], const int steps
+  ){
+  std::ofstream simulation("simulation.txt");
+  simulation << steps << std::endl;
+
+  for(int i = 0; i < steps; i++) simulation << droneXHistory[i] << ' ' << droneYHistory[i] << ' ';
+  simulation << std::endl;
+
+  for(int i = 0; i < steps; i++) simulation << droneDirHistory[i] << ' ';
+  simulation << std::endl;
+
+  for(int i = 0; i < steps; i++) simulation << droneStateHistory[i] << ' ';
+  simulation << std::endl;
+
+  for(int i = 0; i < steps; i++) simulation << droneSelectedTargetHistory[i] << ' ';
+  simulation << std::endl;
+
+  simulation.close();
+}
+
 int main(){
 
   float xd;
@@ -166,6 +241,7 @@ int main(){
   float d; // coeffAero
   float l; // liftForce
   const float g = 9.81f; // gravity
+  float bombFlightTime = 0.0f;
 
   if(!readInput(
     xd, yd, zd, initialDir, v0, accelerationPath, ammo_name, arrayTimeStep, simTimeStep, hitRadius,
@@ -180,38 +256,21 @@ int main(){
   if(!setBombParams(ammo_name, m, d, l)){
     return 1;
   }
-
-  // ==== from HM-1 start
-
-  float bombA = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
-  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
-  float c = (6 * pow(m, 2)) * zd;
-
-  float p = -pow(b, 2) / (3 * pow(bombA, 2));
-  float q = (2 * pow(b, 3)) / (27 * pow(bombA, 3)) + c / bombA;
-
-  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
-
-  if(angCos > 1.0f || angCos < -1.0f){
-    std::cerr << "arccos is out -1...1, value is: " << angCos << std::endl;
+  
+  if(!setBombFlightTime(d, g, m, l, v0, zd, bombFlightTime)) {
     return 1;
   }
 
-  float fi = acos(angCos);
-  
-  float bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * bombA);
   float h = get_h(bombFlightTime, d, g, l, m, v0);
-
-  // ==== from HM-1 end
 
   int step = 0;
   bool reachedFirePoint = false;
-  float t = 0.0f;
   float droneX = xd;
   float droneY = yd;
+  float CURRENT_TIME = 0.0f;
   float CURRENT_DIR = initialDir;
+  float CURRENT_SPEED = 0.0f;
   DroneState CURRENT_STATE = STOPPED;
-  float CURRENT_SPEED = 0;
   float turningTimeLeft = 0.0f;
 
   float droneAcceleration = pow(v0, 2) / (2 * accelerationPath); // (a)
@@ -226,7 +285,7 @@ int main(){
   while (step <= MAX_STEPS && !reachedFirePoint){
       int idx, next;
       float frac;
-      setInterpolationIndex(t, arrayTimeStep, idx, next, frac);
+      setInterpolationIndex(CURRENT_TIME, arrayTimeStep, idx, next, frac);
 
       float bestTime = -1;
       int bestTarget = 0;
@@ -246,7 +305,7 @@ int main(){
         // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
         int idxNext, nextNext;
         float fracNext;
-        setInterpolationIndex(t + simTimeStep, arrayTimeStep, idxNext, nextNext, fracNext);
+        setInterpolationIndex(CURRENT_TIME + simTimeStep, arrayTimeStep, idxNext, nextNext, fracNext);
 
         float targetXNext = interpolateCoord(fracNext, targetXInTime[i][idxNext], targetXInTime[i][nextNext]);
         float targetYNext = interpolateCoord(fracNext, targetYInTime[i][idxNext], targetYInTime[i][nextNext]);
@@ -379,63 +438,11 @@ int main(){
       droneStateHistory[step] = CURRENT_STATE;
       droneSelectedTargetHistory[step] = selectedTargetIndex;
 
-      t+= simTimeStep;
+      CURRENT_TIME += simTimeStep;
       step++;
   }
 
-  std::ofstream simulation("simulation.txt");
-
-  simulation << step << std::endl;
-
-  for(int i = 0; i < step; i++){
-    simulation << droneXHistory[i] << ' ' << droneYHistory[i] << ' ';
-  }
-  simulation << std::endl;
-
-  for(int i = 0; i < step; i++){
-    simulation << droneDirHistory[i] << ' ';
-  }
-  simulation << std::endl;
-
-  for(int i = 0; i < step; i++){
-    simulation << droneStateHistory[i] << ' ';
-  }
-  simulation << std::endl;
-
-  for(int i = 0; i < step; i++){
-    simulation << droneSelectedTargetHistory[i] << ' ';
-  }
-  simulation << std::endl;
-
-  simulation.close();
+  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, step);
 
   return 0;
-}
-
-float get_h(float t, float d, float g, float l, float m, float v0){
-    float l2 = pow(l, 2);
-    float l2p1 = l2 + 1;
-
-    float term1 =
-        (pow(t, 3) * (6 * d * g * l * m - 6 * pow(d, 2) * (l2 - 1) * v0))
-        /
-        (36 * pow(m, 2));
-
-    float term2 = 
-     (pow(t, 5) * (3 * pow(d, 3) * g * pow(l, 3) * m - 3 * pow(d, 4) * l2 * l2p1 * v0))
-     /
-     (36 * l2p1 * pow(m, 4));
-
-     float term3 = 
-     (pow(t, 4) *
-        (3 * pow(d, 3) * (l2p1) * l2 * v0 + 6 * pow(d, 3) * l2p1 * pow(l, 4) * v0 
-        - 6 * pow(d, 2) * g * (pow(l, 4) + l2p1) * l * m)
-    )
-     /
-     (36 * pow(l2p1, 2) * pow(m, 3));
-
-     float term4 = (d * pow(t, 2) * v0) / (m * 2);
-
-
-    return term1 + term2 + term3 - term4 + (t * v0);
 }
