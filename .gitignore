@@ -68,7 +68,6 @@ obj/
 
 # IDE / editor
 .vs/
-.vscode/
 .idea/
 *.swp
 *.swo
