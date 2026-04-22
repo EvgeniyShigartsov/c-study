@@ -250,7 +250,7 @@ int main(){
   float d; // coeffAero
   float l; // liftForce
   const float g = 9.81f; // gravity
-  float bombFlightTime = 0.0f;
+  float bombFlightTime;
 
   if(!readInput(
     xd, yd, zd, initialDir, v0, accelerationPath, ammo_name, arrayTimeStep, simTimeStep, hitRadius,
@@ -301,50 +301,50 @@ int main(){
 
 
       for(int i = 0; i < TARGETS_COUNT; i++){
-        float targetCurrentX = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
-        float targetCurrentY = interpolateCoord(frac, targetYInTime[i][idx], targetYInTime[i][next]);
+        const float targetCurrentX = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
+        const float targetCurrentY = interpolateCoord(frac, targetYInTime[i][idx], targetYInTime[i][next]);
 
         // 1. Розрахувати орієнтовний час прильоту дрона до точки скиду (totalTime) для поточної позиції цілі
         float currentFireX, currentFireY;
         setFirePoint(targetCurrentX, targetCurrentY, droneX, droneY, h, accelerationPath, currentFireX, currentFireY);
 
-        float timeToCurrentFire = calcDistance(currentFireX, currentFireY, droneX, droneY) / v0 + bombFlightTime;
+        const float timeToCurrentFire = calcDistance(currentFireX, currentFireY, droneX, droneY) / v0 + bombFlightTime;
         
         // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
         int idxNext, nextNext;
         float fracNext;
         setInterpolationIndex(CURRENT_TIME + simTimeStep, arrayTimeStep, idxNext, nextNext, fracNext);
 
-        float targetXNext = interpolateCoord(fracNext, targetXInTime[i][idxNext], targetXInTime[i][nextNext]);
-        float targetYNext = interpolateCoord(fracNext, targetYInTime[i][idxNext], targetYInTime[i][nextNext]);
+        const float targetXNext = interpolateCoord(fracNext, targetXInTime[i][idxNext], targetXInTime[i][nextNext]);
+        const float targetYNext = interpolateCoord(fracNext, targetYInTime[i][idxNext], targetYInTime[i][nextNext]);
 
-        float dx = targetXNext - targetCurrentX;
-        float dy = targetYNext - targetCurrentY;
+        const float dx = targetXNext - targetCurrentX;
+        const float dy = targetYNext - targetCurrentY;
 
-        float targetVx = dx / simTimeStep;
-        float targetVy = dy / simTimeStep;
+        const float targetVx = dx / simTimeStep;
+        const float targetVy = dy / simTimeStep;
 
 
         // 3. Інтерполювати прогнозовану позицію цілі на момент currentTime + totalTime
-        float targetPredictedX = targetCurrentX + targetVx * timeToCurrentFire;
-        float targetPredictedY = targetCurrentY + targetVy * timeToCurrentFire;
+        const float targetPredictedX = targetCurrentX + targetVx * timeToCurrentFire;
+        const float targetPredictedY = targetCurrentY + targetVy * timeToCurrentFire;
 
         // 4. Перерахувати балістику до прогнозованої позиції
         float predictedFireX, predictedFireY;
         setFirePoint(targetPredictedX, targetPredictedY, droneX, droneY, h, accelerationPath, predictedFireX, predictedFireY);
 
-        float timeToPredictedFire = calcDistance(predictedFireX, predictedFireY, droneX, droneY) / v0 + bombFlightTime;
+        const float timeToPredictedFire = calcDistance(predictedFireX, predictedFireY, droneX, droneY) / v0 + bombFlightTime;
 
         float totalTime = timeToPredictedFire;
 
         if(i != selectedTargetIndex){
           float timeToChangeTarget = 0.0f; // STOPPED drone case or deltaAngle < turnThreshold;
 
-          float dirToFire = atan2(predictedFireY - droneY, predictedFireX - droneX);
-          float deltaAngle = abs(dirToFire - CURRENT_DIR);
+          const float dirToFire = atan2(predictedFireY - droneY, predictedFireX - droneX);
+          const float deltaAngle = abs(dirToFire - CURRENT_DIR);
 
           if(deltaAngle > turnThreshold){
-            float turningTime = deltaAngle / angularSpeed;
+            const float turningTime = deltaAngle / angularSpeed;
 
             // Додавання часу залежно від поточної дії дрону
             switch (CURRENT_STATE) {
@@ -380,8 +380,8 @@ int main(){
       selectedTargetIndex = bestTarget;
 
       // Перевірено кут повороту та змінено стан відповідно вибраної цілі
-      float dirToFire = atan2(bestFireY - droneY, bestFireX - droneX);
-      float deltaAngle = abs(dirToFire - CURRENT_DIR);
+      const float dirToFire = atan2(bestFireY - droneY, bestFireX - droneX);
+      const float deltaAngle = abs(dirToFire - CURRENT_DIR);
 
       if(deltaAngle > turnThreshold) {
         if(CURRENT_STATE == MOVING || CURRENT_STATE == ACCELERATING) CURRENT_STATE = DECELERATING;
