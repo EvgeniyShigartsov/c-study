@@ -2,20 +2,21 @@
 
 Мінімум щоб devcontainer у цьому проєкті запрацював.
 
-По ОС:
+## Кроки
 
-- `linux.md`
-- `windows.md`
-- `macos.md`
+1. **Поставити Docker** - див. [linux.md](linux.md) / [windows.md](windows.md) / [macos.md](macos.md) для своєї ОС.
+2. **Склонувати репо курсу** (гілка `block-2-lesson-1`). Команди в тому ж OS-файлі, секція "Як взяти код курсу". На Windows - клон йде **в WSL**, не на `C:\`.
+3. **Відкрити у VS Code**: `code .` з Ubuntu-терміналу після клону (не з Windows Explorer - `devcontainer.json` цього проекту зламається без WSL-сесії).
+4. **Встановити Dev Containers extension**: VS Code запропонує сам (із `.vscode/extensions.json`). Якщо ні - `Ctrl+Shift+X` (на macOS `Cmd+Shift+X`), пошук `Dev Containers`, Install.
+5. **Reopen in Container**: VS Code запропонує - погодитись. Перший білд 3-5 хв.
 
-По редактору:
+## Альтернативні редактори
 
-- VS Code - просто extension `Dev Containers`, далі `Reopen in Container`, нічого більше.
-- Будь-який інший редактор (Neovim, JetBrains, Zed, Helix, Sublime, Emacs...) - див. `devcontainers-cli.md`.
+Не VS Code? Див. [devcontainers-cli.md](devcontainers-cli.md) - Neovim, JetBrains, Zed, Helix, Sublime, Emacs.
 
-Перевірка після всього (з кореня проєкту).
+## Перевірка
 
-Через VS Code - `Reopen in Container`, далі у вбудованому терміналі (він уже всередині контейнера):
+Всередині контейнера (VS Code terminal):
 
 ```bash
 cmake -S . -B build
@@ -23,15 +24,4 @@ cmake --build build
 ./build/app
 ```
 
-Через CLI (без VS Code) - кожна команда через `devcontainer exec`:
-
-```bash
-devcontainer up --workspace-folder .
-devcontainer exec --workspace-folder . cmake -S . -B build
-devcontainer exec --workspace-folder . cmake --build build
-devcontainer exec --workspace-folder . ./build/app
-```
-
-Має вивести `Hello, section 2!`.
-
-Якщо щось не те - в чат курсу.
+Має вивести `Hello, section 2!`. Якщо не працює - в чат курсу.

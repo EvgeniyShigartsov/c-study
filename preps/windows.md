@@ -29,22 +29,14 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker "$USER"
 ```
 
-Вийти з WSL (`exit`), відкрити Ubuntu знов - підхопиться група `docker`.
-
-Daemon сам не стартує. Або руками:
-
-```bash
-sudo service docker start
-```
-
-Або один раз увімкнути systemd - додати в `/etc/wsl.conf`:
+Щоб daemon стартував автоматично при кожному запуску WSL, увімкнути systemd - додати в `/etc/wsl.conf`:
 
 ```
 [boot]
 systemd=true
 ```
 
-Потім `wsl --shutdown` з PowerShell і знов відкрити Ubuntu.
+З PowerShell: `wsl --shutdown`. Знов відкрити Ubuntu - це одночасно підхопить нову групу `docker` і стартоне daemon.
 
 Перевірка:
 
@@ -53,3 +45,34 @@ docker run hello-world
 ```
 
 **Важливо:** код тримати в `~/projects/...` всередині WSL, не на `C:\`. Через `/mnt/c/` IO в рази повільніше, VS Code буде нестерпно гальмувати.
+
+## Як взяти код курсу
+
+Клон йде в WSL (не на `C:\`). В Ubuntu-терміналі:
+
+```bash
+sudo apt update && sudo apt install -y git
+
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+
+mkdir -p ~/projects
+cd ~/projects
+git clone --branch block-2-lesson-1 https://github.com/robot-dreams-code/C-PLUS-PLUS-FOR-MILITARY-TECHNOLOGY.git
+cd C-PLUS-PLUS-FOR-MILITARY-TECHNOLOGY
+code .
+```
+
+VS Code запропонує встановити Dev Containers extension (із `.vscode/extensions.json`) - погодитись. Якщо промпт не зявився: `Ctrl+Shift+X`, пошук `Dev Containers`, Install.
+
+Далі VS Code запропонує `Reopen in Container` - теж погодитись.
+
+## Якщо щось не те
+
+`Cannot create process, error code: 193` - проект відкритий з Windows, а не з WSL. `code .` треба робити з Ubuntu-терміналу, не з Windows Explorer.
+
+`No space left on device` у шляху `/root/...` - встановлена тільки службова WSL-дистрибуція `docker-desktop`, без окремої Ubuntu. Це by design, в неї не можна ставити VS Code Server. Фікс: `wsl --install -d Ubuntu` з admin PowerShell, потім клонувати в нову Ubuntu.
+
+Внизу ліворуч у VS Code нема префіксу `WSL: Ubuntu` - сесія VS Code не в WSL. Закрити, зайти в Ubuntu через `wsl`, `cd` у папку проекту, `code .` звідти.
+
+`${localEnv:HOME}` / `${localEnv:USER}` у логах Dev Containers - той самий симптом: на Windows ці змінні порожні, треба відкривати з WSL де вони визначені.
