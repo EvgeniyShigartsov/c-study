@@ -10,6 +10,19 @@
 4. **Встановити Dev Containers extension**: VS Code запропонує сам (із `.vscode/extensions.json`). Якщо ні - `Ctrl+Shift+X` (на macOS `Cmd+Shift+X`), пошук `Dev Containers`, Install.
 5. **Reopen in Container**: VS Code запропонує - погодитись. Перший білд 3-5 хв.
 
+## Якщо вже клонували репо раніше
+
+Якщо репо клоновано до нових оновлень (наприклад фіксів для devcontainer) - підтягнути зміни з remote. В Ubuntu/shell-терміналі:
+
+```bash
+cd ~/projects/C-PLUS-PLUS-FOR-MILITARY-TECHNOLOGY
+git pull
+```
+
+Якщо `cd` каже "No such file or directory" - перевірити куди було клоновано раніше (за інструкцією мало бути `~/projects/`, але могло бути інакше).
+
+Потім у VS Code знов `Reopen in Container`.
+
 ## Альтернативні редактори
 
 Не VS Code? Див. [devcontainers-cli.md](devcontainers-cli.md) - Neovim, JetBrains, Zed, Helix, Sublime, Emacs.
