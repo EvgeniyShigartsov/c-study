@@ -172,17 +172,12 @@ float calcDistance (const float targetX, const float targetY, const float droneX
 }
 
 void setFirePoint (
-  const float targetX, const float targetY, float xd, const float yd,
+  const float targetX, const float targetY, const float xd, const float yd,
   const float h, const float accelerationPath,
   float& out_fireX, float& out_fireY
 ){
   
   float D = calcDistance(targetX, targetY, xd, yd); // Distance from drone to target
-
-  if(D == 0){
-    xd = targetX - (h + accelerationPath);
-    D = calcDistance(targetX, targetY, xd, yd);
-  }
 
   bool shouldMakeManeuver = h + accelerationPath > D;
 
