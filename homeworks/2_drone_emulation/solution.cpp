@@ -263,12 +263,18 @@ int main(){
   bool reachedFirePoint = false;
   float droneX = xd;
   float droneY = yd;
+  float maneuverX = droneX;
+  float maneuverY = droneY;
+  bool needsManeuver = false;
+  bool reachedManeuverPoint = false;
+  float actualDistX, actualDistY;
   float CURRENT_TIME = 0.0f;
   float CURRENT_DIR = initialDir;
   float CURRENT_SPEED = 0.0f;
   DroneState CURRENT_STATE = STOPPED;
   float turningTimeLeft = 0.0f;
   int selectedTargetIndex = 0;
+  int prevSelectedTargetIndex = 0;
 
   float droneXHistory[MAX_STEPS] = {};
   float droneYHistory[MAX_STEPS] = {};
@@ -284,7 +290,7 @@ int main(){
       float bestTime = -1;
       int bestTarget = 0;
       float bestFireX, bestFireY;
-
+      float bestTargetX, bestTargetY;
 
       for(int i = 0; i < TARGETS_COUNT; i++){
         const float targetCurrentX = interpolateCoord(frac, targetXInTime[i][idx], targetXInTime[i][next]);
@@ -361,13 +367,63 @@ int main(){
           bestTarget = i;
           bestFireX = predictedFireX;
           bestFireY = predictedFireY;
+          bestTargetX = targetPredictedX;
+          bestTargetY = targetPredictedY;
         }
       }
-      selectedTargetIndex = bestTarget;
+     
+     if(!needsManeuver){
+       selectedTargetIndex = bestTarget;
+     }
+
+    float distDroneToTarget = calcDistance(droneX, droneY, bestTargetX, bestTargetY);
+    float distFireToTarget = calcDistance(bestFireX, bestFireY, bestTargetX, bestTargetY);
+    bool droneIsBetween = distFireToTarget > distDroneToTarget;
+
+    if(selectedTargetIndex != prevSelectedTargetIndex || step == 0){
+      reachedManeuverPoint = false;
+      if(droneIsBetween){
+        // дрон "між" ціллю і точкою скиду - треба відлетіти далі
+        const float dirAwayFromTarget = atan2(droneY - bestTargetY, droneX - bestTargetX);
+        needsManeuver = true;
+        maneuverX = droneX + (cos(dirAwayFromTarget) * (h + accelerationPath) * 2);
+        maneuverY = droneY + (sin(dirAwayFromTarget) * (h + accelerationPath) * 2);
+      }
+    }
+
+    if(needsManeuver && !reachedManeuverPoint){
+      actualDistX = maneuverX;
+      actualDistY = maneuverY;
+    } else {
+      actualDistX = bestFireX;
+      actualDistY = bestFireY;
+    }
+
+    if(!reachedManeuverPoint){
+      if(calcDistance(droneX, droneY, actualDistX, actualDistY) <= hitRadius) {
+        reachedManeuverPoint = true;
+        needsManeuver = false;
+        actualDistX = bestFireX;  // одразу оновлюємо
+        actualDistY = bestFireY;
+      }
+    }
 
       // Перевірено кут повороту та змінено стан відповідно вибраної цілі
-      const float dirToFire = atan2(bestFireY - droneY, bestFireX - droneX);
+      const float dirToFire = atan2(actualDistY - droneY, actualDistX - droneX);
       const float deltaAngle = abs(dirToFire - CURRENT_DIR);
+
+    //   std::cout
+    // << "step: " << step
+    // << " | reachedManeuverPoint: " << reachedManeuverPoint
+    // << " | needsManeuver: " << needsManeuver
+    // << " | actualDistX: " << actualDistX
+    // << " | actualDistY: " << actualDistY
+    // << " | bestFireX: " << bestFireX
+    // << " | bestFireY: " << bestFireY
+    // << " | dirToFire: " << dirToFire
+    // << " | CURRENT_DIR: " << CURRENT_DIR
+    // << " | CURRENT_STATE: " << CURRENT_STATE
+    // << std::endl;
 
       if(deltaAngle > turnThreshold) {
         if(CURRENT_STATE == MOVING || CURRENT_STATE == ACCELERATING) CURRENT_STATE = DECELERATING;
@@ -419,17 +475,7 @@ int main(){
         updateDroneXY(CURRENT_DIR, CURRENT_SPEED, simTimeStep, droneX, droneY);
       }
 
-// std::cout
-//     << "step: " << step
-//     << " | CURRENT_STATE: " << CURRENT_STATE
-//     << " | droneX: " << droneX
-//     << " | droneY: " << droneY
-//     << " | bestFireX: " << bestFireX
-//     << " | bestFireY: " << bestFireY
-//     << std::endl;
-
-
-      if(calcDistance(droneX, droneY, bestFireX, bestFireY) <= hitRadius){
+      if(calcDistance(droneX, droneY, bestFireX, bestFireY) <= hitRadius && !needsManeuver) {
         reachedFirePoint = true;
       }
 
@@ -439,6 +485,7 @@ int main(){
       droneStateHistory[step] = CURRENT_STATE;
       droneSelectedTargetHistory[step] = selectedTargetIndex;
 
+      prevSelectedTargetIndex = selectedTargetIndex;
       CURRENT_TIME += simTimeStep;
       step++;
   }
