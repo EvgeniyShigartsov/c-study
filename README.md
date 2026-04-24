@@ -69,6 +69,7 @@ git cherry-pick <commit-sha>       # конкретний коміт
 .
 ├── .devcontainer/         # Docker image + конфіг dev-контейнера
 ├── .github/workflows/     # GitHub Actions: CI build через devcontainer
+├── CHANGELOG.md           # лог помітних змін по PR-ах
 ├── CMakeLists.txt         # корневий CMakeLists, підтягує homework_XX через add_subdirectory
 ├── homework_XX/           # окрема домашка, кожна зі своїм CMakeLists.txt
 └── preps/                 # інструкції зі сетапу за платформами
