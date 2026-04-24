@@ -61,7 +61,10 @@ git cherry-pick <commit-sha>       # конкретний коміт
 ## Перед стартом
 
 Потрібно:
-- **Docker** - Docker Desktop на Windows/macOS, Docker Engine на Linux.
+- **Docker Engine** (рекомендовано на всіх платформах). `preps/` містить
+  інструкції: Linux напряму, macOS через Colima, Windows всередині WSL2.
+  Docker Desktop теж працює, але потребує додаткових налаштувань (WSL2
+  integration, file sharing, ресурси), які `preps/` не покриває.
 - **VS Code** з розширенням `ms-vscode-remote.remote-containers` (Dev Containers).
 
 Покрокові інструкції під конкретну платформу:
