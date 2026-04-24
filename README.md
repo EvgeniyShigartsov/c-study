@@ -19,6 +19,14 @@ PR-и на вашій копії йдуть у ваш main.
    fork-зв'язку з курс-репо.
 
 2. **Склонувати власний репо і відкрити у VS Code:**
+
+   > **Windows:** клонувати всередині WSL (відкрити `wsl` у PowerShell),
+   > не на `C:\`. Dev Containers очікує POSIX-середовище (shell-скрипти,
+   > `$HOME`, `$USER`); на Windows host це не працює - VS Code падає на
+   > `.devcontainer/scripts/initialize` (error 193), а `${localEnv:HOME}`
+   > і `${localEnv:USER}` порожні. Деталі - у
+   > [preps/windows.md](preps/windows.md).
+
    ```bash
    git clone https://github.com/<your-username>/cpp-miltech.git
    cd cpp-miltech
