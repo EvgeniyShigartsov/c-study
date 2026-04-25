@@ -34,7 +34,7 @@ struct Coord {
     return result;
   }
   bool operator==(const Coord& other) const {
-    return x == other.x && y == other.y;
+    return abs(x - other.x) < 1e-6f && abs(y - other.y) < 1e-6f;
   }
 };
 
@@ -59,6 +59,27 @@ struct BombParams {
   float drag;
   float lift;
   bool _success = false;
+};
+struct SimStep {
+  Coord CURRENT_POS;
+  float CURRENT_TIME = 0.0f;
+  float CURRENT_SPEED = 0.0f;
+  float CURRENT_DIR;
+  DroneState CURRENT_STATE = STOPPED;
+  Coord maneuverPoint = { 0.0f, 0.0f };
+  float turningTimeLeft = 0.0f;
+
+  int selectedTargetIndex = 0;
+  int prevSelectedTargetIndex = 0;
+  int step = 0;
+  bool reachedFirePoint = false;
+  bool needsManeuver = false;
+  bool reachedManeuverPoint = false;
+ 
+  SimStep(const Coord initialPos, const float initialDir){
+      CURRENT_POS = initialPos;
+      CURRENT_DIR = initialDir;
+  }
 };
 
 DroneConfig readDroneConfig () {
@@ -282,21 +303,7 @@ int main(){
   const float h = get_h(bombFlightTime, bp.drag, g, bp.lift, bp.mass, dc.v0);
   const float droneAcceleration = pow(dc.v0, 2) / (2 * dc.accelerationPath); // (a)
 
-  int step = 0;
-  bool reachedFirePoint = false;
-  float droneX = dc.startPos.x;
-  float droneY = dc.startPos.y;
-  float maneuverX = droneX;
-  float maneuverY = droneY;
-  bool needsManeuver = false;
-  bool reachedManeuverPoint = false;
-  float CURRENT_TIME = 0.0f;
-  float CURRENT_DIR = dc.initialDir;
-  float CURRENT_SPEED = 0.0f;
-  DroneState CURRENT_STATE = STOPPED;
-  float turningTimeLeft = 0.0f;
-  int selectedTargetIndex = 0;
-  int prevSelectedTargetIndex = 0;
+  SimStep sim = SimStep(dc.startPos, dc.initialDir);
 
   float droneXHistory[MAX_STEPS] = {};
   float droneYHistory[MAX_STEPS] = {};
@@ -304,10 +311,10 @@ int main(){
   DroneState droneStateHistory[MAX_STEPS] = {};
   int droneSelectedTargetHistory[MAX_STEPS] = {};
 
-  while (step <= MAX_STEPS && !reachedFirePoint){
+  while (sim.step <= MAX_STEPS && !sim.reachedFirePoint){
       int idx, next;
       float frac;
-      setInterpolationIndex(CURRENT_TIME, dc.arrayTimeStep, idx, next, frac);
+      setInterpolationIndex(sim.CURRENT_TIME, dc.arrayTimeStep, idx, next, frac);
 
       int bestTarget = 0;
       float bestTime = -1.0f;
@@ -321,14 +328,14 @@ int main(){
 
         // 1. Розрахувати орієнтовний час прильоту дрона до точки скиду (totalTime) для поточної позиції цілі
         float currentFireX, currentFireY;
-        setFirePoint(targetCurrentX, targetCurrentY, droneX, droneY, h, currentFireX, currentFireY);
+        setFirePoint(targetCurrentX, targetCurrentY, sim.CURRENT_POS.x, sim.CURRENT_POS.y, h, currentFireX, currentFireY);
 
-        const float timeToCurrentFire = calcDistance(currentFireX, currentFireY, droneX, droneY) / dc.v0 + bombFlightTime;
+        const float timeToCurrentFire = calcDistance(currentFireX, currentFireY, sim.CURRENT_POS.x, sim.CURRENT_POS.y) / dc.v0 + bombFlightTime;
         
         // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
         int idxNext, nextNext;
         float fracNext;
-        setInterpolationIndex(CURRENT_TIME + dc.simTimeStep, dc.arrayTimeStep, idxNext, nextNext, fracNext);
+        setInterpolationIndex(sim.CURRENT_TIME + dc.simTimeStep, dc.arrayTimeStep, idxNext, nextNext, fracNext);
 
         const float targetXNext = interpolateCoord(fracNext, targetXInTime[i][idxNext], targetXInTime[i][nextNext]);
         const float targetYNext = interpolateCoord(fracNext, targetYInTime[i][idxNext], targetYInTime[i][nextNext]);
@@ -346,32 +353,32 @@ int main(){
 
         // 4. Перерахувати балістику до прогнозованої позиції
         float predictedFireX, predictedFireY;
-        setFirePoint(targetPredictedX, targetPredictedY, droneX, droneY, h, predictedFireX, predictedFireY);
+        setFirePoint(targetPredictedX, targetPredictedY, sim.CURRENT_POS.x, sim.CURRENT_POS.y, h, predictedFireX, predictedFireY);
 
-        const float timeToPredictedFire = calcDistance(predictedFireX, predictedFireY, droneX, droneY) / dc.v0 + bombFlightTime;
+        const float timeToPredictedFire = calcDistance(predictedFireX, predictedFireY, sim.CURRENT_POS.x, sim.CURRENT_POS.y) / dc.v0 + bombFlightTime;
 
         float totalTime = timeToPredictedFire;
 
-        if(i != selectedTargetIndex){
+        if(i != sim.selectedTargetIndex){
           float timeToChangeTarget = 0.0f; // STOPPED стан або deltaAngle < turnThreshold;
 
-          const float dirToFire = atan2(predictedFireY - droneY, predictedFireX - droneX);
-          const float deltaAngle = abs(dirToFire - CURRENT_DIR);
+          const float dirToFire = atan2(predictedFireY - sim.CURRENT_POS.y, predictedFireX - sim.CURRENT_POS.x);
+          const float deltaAngle = abs(dirToFire - sim.CURRENT_DIR);
 
           if(deltaAngle > dc.turnThreshold){
             const float turningTime = deltaAngle / dc.angularSpeed;
 
             // Додавання часу залежно від поточної дії дрону
-            switch (CURRENT_STATE) {
+            switch (sim.CURRENT_STATE) {
             case ACCELERATING:
             case DECELERATING:
-              timeToChangeTarget += CURRENT_SPEED / droneAcceleration;
+              timeToChangeTarget += sim.CURRENT_SPEED / droneAcceleration;
               break;
             case MOVING:
               timeToChangeTarget += dc.v0 / droneAcceleration;
               break;
             case TURNING:
-              timeToChangeTarget += turningTimeLeft;
+              timeToChangeTarget += sim.turningTimeLeft;
               break;
             case STOPPED: // Немає потреби додавати час
               break;
@@ -395,110 +402,110 @@ int main(){
         }
       }
      
-      if(!needsManeuver){
-        selectedTargetIndex = bestTarget;
+      if(!sim.needsManeuver){
+        sim.selectedTargetIndex = bestTarget;
       }
 
-      if(selectedTargetIndex != prevSelectedTargetIndex || step == 0){
-        reachedManeuverPoint = false;
+      if(sim.selectedTargetIndex != sim.prevSelectedTargetIndex || sim.step == 0){
+        sim.reachedManeuverPoint = false;
 
-        float distDroneToTarget = calcDistance(droneX, droneY, bestTargetX, bestTargetY);
+        float distDroneToTarget = calcDistance(sim.CURRENT_POS.x, sim.CURRENT_POS.y, bestTargetX, bestTargetY);
         float distFireToTarget = calcDistance(bestFireX, bestFireY, bestTargetX, bestTargetY);
 
         if(distFireToTarget > distDroneToTarget){
           // дрон між ціллю і точкою скиду - треба відлетіти далі
-          const float dirAwayFromTarget = atan2(droneY - bestTargetY, droneX - bestTargetX);
-          needsManeuver = true;
-          maneuverX = droneX + (cos(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
-          maneuverY = droneY + (sin(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
+          const float dirAwayFromTarget = atan2(sim.CURRENT_POS.y - bestTargetY, sim.CURRENT_POS.x - bestTargetX);
+          sim.needsManeuver = true;
+          sim.maneuverPoint.x = sim.CURRENT_POS.x + (cos(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
+          sim.maneuverPoint.y = sim.CURRENT_POS.y + (sin(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
         }
       }
 
-      if(needsManeuver && !reachedManeuverPoint){
-        actualDistX = maneuverX;
-        actualDistY = maneuverY;
+      if(sim.needsManeuver && !sim.reachedManeuverPoint){
+        actualDistX = sim.maneuverPoint.x;
+        actualDistY = sim.maneuverPoint.y;
       } else {
         actualDistX = bestFireX;
         actualDistY = bestFireY;
       }
 
-      if(!reachedManeuverPoint && calcDistance(droneX, droneY, actualDistX, actualDistY) <= dc.hitRadius){
-        reachedManeuverPoint = true;
-        needsManeuver = false;
+      if(!sim.reachedManeuverPoint && calcDistance(sim.CURRENT_POS.x, sim.CURRENT_POS.y, actualDistX, actualDistY) <= dc.hitRadius){
+        sim.reachedManeuverPoint = true;
+        sim.needsManeuver = false;
         actualDistX = bestFireX;
         actualDistY = bestFireY;
       }
 
         // Перевірено кут повороту та змінено стан відповідно вибраної цілі
-      const float dirToFire = atan2(actualDistY - droneY, actualDistX - droneX);
-      const float deltaAngle = abs(dirToFire - CURRENT_DIR);
+      const float dirToFire = atan2(actualDistY - sim.CURRENT_POS.y, actualDistX - sim.CURRENT_POS.x);
+      const float deltaAngle = abs(dirToFire - sim.CURRENT_DIR);
 
       if(deltaAngle > dc.turnThreshold) {
-        if(CURRENT_STATE == MOVING || CURRENT_STATE == ACCELERATING) CURRENT_STATE = DECELERATING;
-        else if(CURRENT_STATE == STOPPED) {
-          CURRENT_STATE = TURNING;
-          turningTimeLeft = deltaAngle / dc.angularSpeed;
+        if(sim.CURRENT_STATE == MOVING || sim.CURRENT_STATE == ACCELERATING) sim.CURRENT_STATE = DECELERATING;
+        else if(sim.CURRENT_STATE == STOPPED) {
+          sim.CURRENT_STATE = TURNING;
+          sim.turningTimeLeft = deltaAngle / dc.angularSpeed;
         }
       } else {
-        CURRENT_DIR = dirToFire;
+        sim.CURRENT_DIR = dirToFire;
       }
 
       // Оновлення координати, швидкість та стан дрона відповідно до поточної фази
-      if(CURRENT_STATE == DECELERATING){
-        CURRENT_SPEED -= droneAcceleration * dc.simTimeStep;
-        updateDroneXY(CURRENT_DIR, CURRENT_SPEED, dc.simTimeStep, droneX, droneY);        
+      if(sim.CURRENT_STATE == DECELERATING){
+        sim.CURRENT_SPEED -= droneAcceleration * dc.simTimeStep;
+        updateDroneXY(sim.CURRENT_DIR, sim.CURRENT_SPEED, dc.simTimeStep, sim.CURRENT_POS.x, sim.CURRENT_POS.y);        
 
-        if(CURRENT_SPEED <= 0){
-          CURRENT_SPEED = 0;
-          CURRENT_STATE = STOPPED;
-          turningTimeLeft = deltaAngle / dc.angularSpeed;
+        if(sim.CURRENT_SPEED <= 0){
+          sim.CURRENT_SPEED = 0;
+          sim.CURRENT_STATE = STOPPED;
+          sim.turningTimeLeft = deltaAngle / dc.angularSpeed;
         }
-      } else if (CURRENT_STATE == STOPPED){
+      } else if (sim.CURRENT_STATE == STOPPED){
         if(deltaAngle > dc.turnThreshold){
-          CURRENT_STATE = TURNING;
+          sim.CURRENT_STATE = TURNING;
         } else {
-          CURRENT_STATE = ACCELERATING;
+          sim.CURRENT_STATE = ACCELERATING;
         }
-      } else if(CURRENT_STATE == TURNING){
-        dirToFire > CURRENT_DIR 
-        ? CURRENT_DIR += dc.angularSpeed * dc.simTimeStep
-        : CURRENT_DIR -= dc.angularSpeed * dc.simTimeStep;
+      } else if(sim.CURRENT_STATE == TURNING){
+        dirToFire > sim.CURRENT_DIR 
+        ? sim.CURRENT_DIR += dc.angularSpeed * dc.simTimeStep
+        : sim.CURRENT_DIR -= dc.angularSpeed * dc.simTimeStep;
 
-        turningTimeLeft -= dc.simTimeStep;
+        sim.turningTimeLeft -= dc.simTimeStep;
 
-        if(turningTimeLeft <= 0){
-          CURRENT_DIR = dirToFire;
-          CURRENT_STATE = ACCELERATING;
+        if(sim.turningTimeLeft <= 0){
+          sim.CURRENT_DIR = dirToFire;
+          sim.CURRENT_STATE = ACCELERATING;
         }
-      } else if (CURRENT_STATE == ACCELERATING) {
-        CURRENT_SPEED += droneAcceleration * dc.simTimeStep;
+      } else if (sim.CURRENT_STATE == ACCELERATING) {
+        sim.CURRENT_SPEED += droneAcceleration * dc.simTimeStep;
 
-        if(CURRENT_SPEED >= dc.v0){
-          CURRENT_SPEED = dc.v0;
-          CURRENT_STATE = MOVING;
+        if(sim.CURRENT_SPEED >= dc.v0){
+          sim.CURRENT_SPEED = dc.v0;
+          sim.CURRENT_STATE = MOVING;
         }
-        updateDroneXY(CURRENT_DIR, CURRENT_SPEED, dc.simTimeStep, droneX, droneY);
+        updateDroneXY(sim.CURRENT_DIR, sim.CURRENT_SPEED, dc.simTimeStep, sim.CURRENT_POS.x, sim.CURRENT_POS.y);
 
-      } else if(CURRENT_STATE == MOVING){
-        updateDroneXY(CURRENT_DIR, CURRENT_SPEED, dc.simTimeStep, droneX, droneY);
+      } else if(sim.CURRENT_STATE == MOVING){
+        updateDroneXY(sim.CURRENT_DIR, sim.CURRENT_SPEED, dc.simTimeStep, sim.CURRENT_POS.x, sim.CURRENT_POS.y);
       }
 
-      if(calcDistance(droneX, droneY, bestFireX, bestFireY) <= dc.hitRadius && !needsManeuver) {
-        reachedFirePoint = true;
+      if(calcDistance(sim.CURRENT_POS.x, sim.CURRENT_POS.y, bestFireX, bestFireY) <= dc.hitRadius && !sim.needsManeuver) {
+        sim.reachedFirePoint = true;
       }
 
-      droneXHistory[step] = droneX;
-      droneYHistory[step] = droneY;
-      droneDirHistory[step] = CURRENT_DIR;
-      droneStateHistory[step] = CURRENT_STATE;
-      droneSelectedTargetHistory[step] = selectedTargetIndex;
+      droneXHistory[sim.step] = sim.CURRENT_POS.x;
+      droneYHistory[sim.step] = sim.CURRENT_POS.y;
+      droneDirHistory[sim.step] = sim.CURRENT_DIR;
+      droneStateHistory[sim.step] = sim.CURRENT_STATE;
+      droneSelectedTargetHistory[sim.step] = sim.selectedTargetIndex;
 
-      prevSelectedTargetIndex = selectedTargetIndex;
-      CURRENT_TIME += dc.simTimeStep;
-      step++;
+      sim.prevSelectedTargetIndex = sim.selectedTargetIndex;
+      sim.CURRENT_TIME += dc.simTimeStep;
+      sim.step++;
   }
 
-  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, step);
+  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, sim.step);
 
   return 0;
 }
