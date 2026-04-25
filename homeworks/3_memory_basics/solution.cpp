@@ -53,9 +53,16 @@ struct DroneConfig {
   bool _success = false;
 };
 
+struct BombParams {
+  char name[BOMB_CHAR_COUNT];
+  float mass;
+  float drag;
+  float lift;
+  bool _success = false;
+};
+
 DroneConfig readDroneConfig () {
     DroneConfig config;
-
     std::ifstream input("input.txt");
 
     if (!input.is_open()) {
@@ -72,7 +79,6 @@ DroneConfig readDroneConfig () {
     std::cout << "input.txt has incorrect data format." << std::endl;
     return config;
   }
-
   input.close();
 
   config._success = true;
@@ -111,7 +117,8 @@ bool readTargets (
   return true;
 }
 
-bool setBombParams (const char ammo_name[BOMB_CHAR_COUNT], float& out_m, float& out_d, float& out_l){
+BombParams readBombParams (const char ammo_name[BOMB_CHAR_COUNT]){
+  BombParams bombParams;
 
   const char bombNames[BOMBS_COUNT][BOMB_CHAR_COUNT] =  {"VOG-17", "M67", "RKG-3", "GLIDING-VOG", "GLIDING-RKG"};
   const float bombM[BOMBS_COUNT] = {0.35f, 0.6f, 1.2f, 0.45f, 1.4f};
@@ -119,19 +126,21 @@ bool setBombParams (const char ammo_name[BOMB_CHAR_COUNT], float& out_m, float& 
   const float bombL[BOMBS_COUNT] = {0.0f, 0.0f, 0.0f, 1.0f, 1.0f};
 
     for (int i = 0; i < BOMBS_COUNT; i++){
-    if(strcmp(ammo_name, bombNames[i]) == 0){
-      out_m = bombM[i];
-      out_d = bombD[i];
-      out_l = bombL[i];
-      break;
-    }
+      if(strcmp(ammo_name, bombNames[i]) == 0){
+        strncpy(bombParams.name, ammo_name, BOMB_CHAR_COUNT);
+        bombParams.mass = bombM[i];
+        bombParams.drag = bombD[i];
+        bombParams.lift = bombL[i];
+        break;
+      }
     if(i == BOMBS_COUNT - 1){
       std::cerr << "Invalid ammo_name: " << ammo_name << std::endl;
-      return false;
+      return bombParams;
     }
   }
 
-  return true;
+  bombParams._success = true;
+  return bombParams;
 }
 
 float get_h(float t, float d, float g, float l, float m, float v0){
@@ -252,15 +261,13 @@ int main(){
   float targetXInTime[TARGETS_COUNT][TARGET_MOVES_COUNT] = {};
   float targetYInTime[TARGETS_COUNT][TARGET_MOVES_COUNT] = {};
 
-  float m; // ammoMass
-  float d; // coeffAero
-  float l; // liftForce
   const float g = 9.81f; // gravity
   float bombFlightTime;
 
   const DroneConfig dc = readDroneConfig();
+  const BombParams bp = readBombParams(dc.ammoName);
 
-  if(!dc._success){
+  if(!dc._success || !bp._success){
     return 1;
   }
 
@@ -268,15 +275,11 @@ int main(){
     return 1;
   }
 
-  if(!setBombParams(dc.ammoName, m, d, l)){
-    return 1;
-  }
-  
-  if(!setBombFlightTime(d, g, m, l, dc.v0, dc.altitude, bombFlightTime)) {
+  if(!setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
     return 1;
   }
 
-  const float h = get_h(bombFlightTime, d, g, l, m, dc.v0);
+  const float h = get_h(bombFlightTime, bp.drag, g, bp.lift, bp.mass, dc.v0);
   const float droneAcceleration = pow(dc.v0, 2) / (2 * dc.accelerationPath); // (a)
 
   int step = 0;
