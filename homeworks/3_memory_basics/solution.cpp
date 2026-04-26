@@ -2,6 +2,9 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 const int BOMBS_COUNT = 5;
 const int BOMB_CHAR_COUNT = 12;
@@ -86,26 +89,38 @@ struct InterpolationIndex {
   int next;
 };
 
-
-
 bool readDroneConfig (DroneConfig& out_config) {
-    std::ifstream input("input.txt");
+  std::ifstream config("config.json");
 
-    if (!input.is_open()) {
-      std::cout << "input.txt not found." << std::endl;
-      return false;
-  }
-
-  input >>
-    out_config.startPos.x >> out_config.startPos.y >> out_config.altitude >> out_config.initialDir >>
-    out_config.v0 >> out_config.accelerationPath >> out_config.ammoName >> out_config.arrayTimeStep >>
-    out_config.simTimeStep >> out_config.hitRadius >> out_config.angularSpeed >> out_config.turnThreshold;
-  
-   if(input.fail()){
-    std::cout << "input.txt has incorrect data format." << std::endl;
+  if (!config.is_open()) {
+    std::cout << "config.json not found." << std::endl;
     return false;
   }
-  input.close();
+
+  try {
+    json data;
+    config >> data;
+
+    const char* tmp = data["ammo"].get<std::string>().c_str();
+    strncpy(out_config.ammoName, tmp, BOMB_CHAR_COUNT);
+    
+    out_config.startPos.x = data["drone"]["position"]["x"];
+    out_config.startPos.y = data["drone"]["position"]["y"];
+    out_config.altitude = data["drone"]["altitude"];
+    out_config.initialDir = data["drone"]["initialDirection"];
+    out_config.v0 = data["drone"]["attackSpeed"];
+    out_config.accelerationPath = data["drone"]["accelerationPath"];
+    out_config.arrayTimeStep = data["targetArrayTimeStep"];
+    out_config.simTimeStep = data["simulation"]["timeStep"];
+    out_config.hitRadius = data["simulation"]["hitRadius"];
+    out_config.angularSpeed = data["drone"]["angularSpeed"];
+    out_config.turnThreshold = data["drone"]["turnThreshold"];
+    
+  } catch(const json::exception& parseError){
+    std::cout << "config.json parse error: " << parseError.what() << std::endl;
+    return false;
+  }
+  config.close();
 
   return true;
 }
