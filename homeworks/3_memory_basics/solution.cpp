@@ -333,19 +333,13 @@ int main(){
         const InterpolationIndex nextIndex = getInterpolationIndex(sim.CURRENT_TIME + dc.simTimeStep, dc.arrayTimeStep);
 
         const Coord targetNextXY = interpolatePos(nextIndex.frac, targetsInTime[i][nextIndex.idx], targetsInTime[i][nextIndex.next]);
-
-        const float dx = targetNextXY.x - targetCurrentXY.x;
-        const float dy = targetNextXY.y - targetCurrentXY.y;
-
-        const float targetVx = dx / dc.simTimeStep;
-        const float targetVy = dy / dc.simTimeStep;
+        const Coord targetVelocity = (targetNextXY - targetCurrentXY) / dc.simTimeStep;
 
         // 3. Інтерполювати прогнозовану позицію цілі на момент currentTime + totalTime
-        const float targetPredictedX = targetCurrentXY.x + targetVx * timeToCurrentFire;
-        const float targetPredictedY = targetCurrentXY.y + targetVy * timeToCurrentFire;
+        const Coord targetPredictedXY = targetCurrentXY + targetVelocity * timeToCurrentFire;
 
         // 4. Перерахувати балістику до прогнозованої позиції
-        Coord predictedFire = getFirePoint({targetPredictedX, targetPredictedY}, sim.CURRENT_POS, h);
+        Coord predictedFire = getFirePoint(targetPredictedXY, sim.CURRENT_POS, h);
         const float timeToPredictedFire = calcDistance(predictedFire, sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
         float totalTime = timeToPredictedFire;
@@ -387,7 +381,7 @@ int main(){
           bestTime = totalTime;
           bestTarget = i;
           bestFire = predictedFire;
-          bestTargetCoord = {targetPredictedX, targetPredictedY};
+          bestTargetCoord = targetPredictedXY;
         }
       }
      
