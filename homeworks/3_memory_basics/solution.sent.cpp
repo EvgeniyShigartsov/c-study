@@ -309,29 +309,6 @@ float getDirectionFromTo (const Coord& from, const Coord& to){
   return atan2(to.y - from.y, to.x - from.x);
 }
 
-void writeSimulation (
-  const float droneXHistory[MAX_STEPS], const float droneYHistory[MAX_STEPS],
-  const float droneDirHistory[MAX_STEPS], const DroneState droneStateHistory[MAX_STEPS],
-  const int droneSelectedTargetHistory[MAX_STEPS], const int steps
-  ){
-  std::ofstream simulation("simulation.txt");
-  simulation << steps << std::endl;
-
-  for(int i = 0; i < steps; i++) simulation << droneXHistory[i] << ' ' << droneYHistory[i] << ' ';
-  simulation << std::endl;
-
-  for(int i = 0; i < steps; i++) simulation << droneDirHistory[i] << ' ';
-  simulation << std::endl;
-
-  for(int i = 0; i < steps; i++) simulation << droneStateHistory[i] << ' ';
-  simulation << std::endl;
-
-  for(int i = 0; i < steps; i++) simulation << droneSelectedTargetHistory[i] << ' ';
-  simulation << std::endl;
-
-  simulation.close();
-}
-
 json toJsonXY(const Coord& coord){
   return {{"x", coord.x}, {"y", coord.y}};
 }
@@ -386,13 +363,6 @@ int main(){
   const float droneAcceleration = pow(dc.v0, 2) / (2 * dc.accelerationPath); // (a)
 
   Simulation sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
-
-  float droneXHistory[MAX_STEPS] = {};
-  float droneYHistory[MAX_STEPS] = {};
-  float droneDirHistory[MAX_STEPS] = {};
-  DroneState droneStateHistory[MAX_STEPS] = {};
-  int droneSelectedTargetHistory[MAX_STEPS] = {};
-
   SimStep* stepsLog = new SimStep[MAX_STEPS];
 
   while (sim.step <= MAX_STEPS && !sim.reachedFirePoint){
@@ -555,12 +525,6 @@ int main(){
       DEBUG("Step " << sim.step << " pos=(" << sim.CURRENT_POS.x << "," << sim.CURRENT_POS.y << ")");
       DEBUG("  target=" << sim.selectedTargetIndex << " state=" << sim.CURRENT_STATE);
 
-      droneXHistory[sim.step] = sim.CURRENT_POS.x;
-      droneYHistory[sim.step] = sim.CURRENT_POS.y;
-      droneDirHistory[sim.step] = sim.CURRENT_DIR;
-      droneStateHistory[sim.step] = sim.CURRENT_STATE;
-      droneSelectedTargetHistory[sim.step] = sim.selectedTargetIndex;
-
       const Coord dir = {cos(sim.CURRENT_DIR),  sin(sim.CURRENT_DIR)};
       const InterpolationIndex bombDropIndex = getInterpolationIndex(sim.CURRENT_TIME + bombFlightTime, dc.arrayTimeStep, TARGET_MOVES_COUNT);
 
@@ -580,8 +544,6 @@ int main(){
       sim.CURRENT_TIME += dc.simTimeStep;
       sim.step++;
   }
-
-  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, sim.step);
 
   writeSimulationJson(sim.step, stepsLog);
 
