@@ -339,14 +339,29 @@ int main(){
   const int TARGET_MOVES_COUNT = targetsData["timeSteps"];
 
   Coord** targetsInTime = new Coord*[TARGETS_COUNT];
+  bool targetsParseOK = false;
 
-  for(int target = 0; target < TARGETS_COUNT; target++){
-    targetsInTime[target] = new Coord[TARGET_MOVES_COUNT];
-    for(int move = 0; move < TARGET_MOVES_COUNT; move++){
-      targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
-      targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
+  try {
+    for(int target = 0; target < TARGETS_COUNT; target++){
+      targetsInTime[target] = new Coord[TARGET_MOVES_COUNT];
+      for(int move = 0; move < TARGET_MOVES_COUNT; move++){
+        targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
+        targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
+      }
     }
+
+    targetsParseOK = true;
+  } catch(const json::exception& parseError){
+    LOG("targets.json parse error: " << parseError.what());
+    
+    for (int i = 0; i < TARGETS_COUNT; i++){
+      delete[] targetsInTime[i];
+    }
+    delete[] targetsInTime;
+    targetsInTime = nullptr;
   }
+
+
 
   const float g = 9.81f; // gravity
   float bombFlightTime;
@@ -356,6 +371,7 @@ int main(){
 
   if(!readDroneConfig(dc)
       || !readBombParams(dc.ammoName, bp)
+      || !targetsParseOK
       || !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)
     ){
     return 1;
