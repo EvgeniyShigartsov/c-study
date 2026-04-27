@@ -270,6 +270,35 @@ void writeSimulation (
   simulation.close();
 }
 
+json toJsonXY(const Coord& coord){
+  return {{"x", coord.x}, {"y", coord.y}};
+}
+
+void writeSimulationJson (const int totalSteps, const SimStep* steps){
+  json out;
+
+  out["totalSteps"] = totalSteps;
+  out["steps"] = json::array();
+
+  for(int i = 0; i < totalSteps; i++){
+    const SimStep& step = steps[i];
+    json outStep;
+
+    outStep["position"] = toJsonXY(step.pos);
+    outStep["direction"] = step.direction;
+    outStep["state"] = step.state;
+    outStep["targetIndex"] = step.targetIdx;
+    outStep["dropPoint"] = toJsonXY(step.dropPoint);
+    outStep["aimPoint"] = toJsonXY(step.aimPoint);
+    outStep["predictedTarget"] = toJsonXY(step.predictedTarget);
+
+    out["steps"].push_back(outStep);
+  }
+
+  std::ofstream outJsonFile("simulation.json");
+  outJsonFile << out.dump(2);
+}
+
 void updateDroneXY (
   const float CURRENT_DIR, const float CURRENT_SPEED, const float simTimeStep,
   Coord& out_dronePosition
@@ -331,7 +360,7 @@ int main(){
       int bestTarget = 0;
       float bestTime = -1.0f;
       Coord bestFire;
-      Coord bestTargetCoord;
+      Coord bestTargetPredictedXY;
       Coord actualDist;
 
       for(int i = 0; i < TARGETS_COUNT; i++){
@@ -393,7 +422,7 @@ int main(){
           bestTime = totalTime;
           bestTarget = i;
           bestFire = predictedFire;
-          bestTargetCoord = targetPredictedXY;
+          bestTargetPredictedXY = targetPredictedXY;
         }
       }
      
@@ -404,12 +433,12 @@ int main(){
       if(sim.selectedTargetIndex != sim.prevSelectedTargetIndex || sim.step == 0){
         sim.reachedManeuverPoint = false;
 
-        float distDroneToTarget = length(sim.CURRENT_POS - bestTargetCoord);
-        float distFireToTarget = length(bestFire - bestTargetCoord);
+        float distDroneToTarget = length(sim.CURRENT_POS - bestTargetPredictedXY);
+        float distFireToTarget = length(bestFire - bestTargetPredictedXY);
 
         if(distFireToTarget > distDroneToTarget){
           // дрон між ціллю і точкою скиду - треба відлетіти далі
-          const float dirAwayFromTarget = getDirectionFromTo(bestTargetCoord, sim.CURRENT_POS);
+          const float dirAwayFromTarget = getDirectionFromTo(bestTargetPredictedXY, sim.CURRENT_POS);
           sim.needsManeuver = true;
           sim.maneuverPoint.x = sim.CURRENT_POS.x + (cos(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
           sim.maneuverPoint.y = sim.CURRENT_POS.y + (sin(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
@@ -489,13 +518,19 @@ int main(){
       droneSelectedTargetHistory[sim.step] = sim.selectedTargetIndex;
 
       const Coord dir = {cos(sim.CURRENT_DIR),  sin(sim.CURRENT_DIR)};
+      const InterpolationIndex bombDropIndex = getInterpolationIndex(sim.CURRENT_TIME + bombFlightTime, dc.arrayTimeStep, TARGET_MOVES_COUNT);
 
       stepsLog[sim.step].pos = sim.CURRENT_POS;
       stepsLog[sim.step].direction = sim.CURRENT_DIR;
       stepsLog[sim.step].state = sim.CURRENT_STATE;
       stepsLog[sim.step].targetIdx = sim.selectedTargetIndex;
       stepsLog[sim.step].dropPoint = bestFire;
-      // stepsLog[sim.step].aimPoint = sim.CURRENT_POS + dir *
+      stepsLog[sim.step].aimPoint = sim.CURRENT_POS + dir * h;
+      stepsLog[sim.step].predictedTarget = interpolatePos(
+          bombDropIndex.frac,
+          targetsInTime[sim.selectedTargetIndex][bombDropIndex.idx],
+          targetsInTime[sim.selectedTargetIndex][bombDropIndex.next]
+        );
 
       sim.prevSelectedTargetIndex = sim.selectedTargetIndex;
       sim.CURRENT_TIME += dc.simTimeStep;
@@ -503,6 +538,8 @@ int main(){
   }
 
   writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, sim.step);
+
+  writeSimulationJson(sim.step, stepsLog);
 
   for (int i = 0; i < TARGETS_COUNT; i++){
     delete[] targetsInTime[i];
