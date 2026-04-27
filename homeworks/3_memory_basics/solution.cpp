@@ -153,17 +153,21 @@ bool readDroneConfig (DroneConfig& out_config) {
 bool readBombParams (const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombParams){
   std::ifstream ammoFile("ammo.json");
   json ammoData; ammoFile >> ammoData;
-
+  
   const int ammoCount = ammoData.size();
   BombParams* ammoList = new BombParams[ammoCount];
-
-  for(int i = 0; i < ammoCount; i++){
-    strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
-    ammoList[i].mass = ammoData[i]["mass"];
-    ammoList[i].drag = ammoData[i]["drag"];
-    ammoList[i].lift = ammoData[i]["lift"];
-  }
   bool found = false;
+
+  try {
+    for(int i = 0; i < ammoCount; i++){
+      strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
+      ammoList[i].mass = ammoData[i]["mass"];
+      ammoList[i].drag = ammoData[i]["drag"];
+      ammoList[i].lift = ammoData[i]["lift"];
+    }
+  } catch(const json::exception& parseError){
+    LOG("ammo.json parse error: " << parseError.what());
+  }
 
   for (int i = 0; i < ammoCount; i++){
     const BombParams bomb = ammoList[i];
@@ -172,16 +176,42 @@ bool readBombParams (const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bomb
       found = true;
       break;
     }
- }
+  }
 
- if(!found) std::cerr << "Invalid ammo_name: " << ammo_name << std::endl;
+ if(!found) LOG("Invalid ammo_name: " << ammo_name);
 
   delete[] ammoList;
   ammoList = nullptr;
   return found;
 }
 
-float get_h(float t, float d, float g, float l, float m, float v0){
+bool setBombFlightTime (
+  const float d, const float g, const float m,
+  const float l, const float v0, const float zd,
+  float& out_bombFlightTime
+){
+  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
+  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
+  float c = (6 * pow(m, 2)) * zd;
+
+  float p = -pow(b, 2) / (3 * pow(a, 2));
+  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
+
+  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
+
+  if(angCos > 1.0f || angCos < -1.0f){
+    LOG("arccos is out -1...1, value is: " << angCos);
+    return false;
+  }
+
+  float fi = acos(angCos);
+  
+  out_bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
+
+  return true;
+}
+
+float get_h(const float t, const float d, const float g, const float l, const float m, const float v0){
     float l2 = pow(l, 2);
     float l2p1 = l2 + 1;
 
@@ -207,32 +237,6 @@ float get_h(float t, float d, float g, float l, float m, float v0){
 
 
     return term1 + term2 + term3 - term4 + (t * v0);
-}
-
-bool setBombFlightTime (
-  const float d, const float g, const float m,
-  const float l, const float v0, const float zd,
-  float& out_bombFlightTime
-){
-  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
-  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
-  float c = (6 * pow(m, 2)) * zd;
-
-  float p = -pow(b, 2) / (3 * pow(a, 2));
-  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
-
-  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
-
-  if(angCos > 1.0f || angCos < -1.0f){
-    std::cerr << "arccos is out -1...1, value is: " << angCos << std::endl;
-    return false;
-  }
-
-  float fi = acos(angCos);
-  
-  out_bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
-
-  return true;
 }
 
 Coord interpolatePos (const float frac, const Coord& currentTargetPos, const Coord& nextTargetPos){
@@ -261,6 +265,18 @@ InterpolationIndex getInterpolationIndex (const float t, const float arrayTimeSt
 Coord getFirePoint (const Coord targetCoord, const Coord droneCoord, const float h){
   const Coord delta = targetCoord - droneCoord;
   return targetCoord - normalizeCoord(delta) * h;
+}
+
+void updateDroneXY (
+  const float CURRENT_DIR, const float CURRENT_SPEED, const float simTimeStep,
+  Coord& out_dronePosition
+  ){
+    out_dronePosition.x += cos(CURRENT_DIR) * CURRENT_SPEED * simTimeStep;
+    out_dronePosition.y += sin(CURRENT_DIR) * CURRENT_SPEED * simTimeStep;
+}
+
+float getDirectionFromTo (const Coord& from, const Coord& to){
+  return atan2(to.y - from.y, to.x - from.x);
 }
 
 void writeSimulation (
@@ -313,18 +329,6 @@ void writeSimulationJson (const int totalSteps, const SimStep* steps){
 
   std::ofstream outJsonFile("simulation.json");
   outJsonFile << out.dump(2);
-}
-
-void updateDroneXY (
-  const float CURRENT_DIR, const float CURRENT_SPEED, const float simTimeStep,
-  Coord& out_dronePosition
-  ){
-    out_dronePosition.x += cos(CURRENT_DIR) * CURRENT_SPEED * simTimeStep;
-    out_dronePosition.y += sin(CURRENT_DIR) * CURRENT_SPEED * simTimeStep;
-}
-
-float getDirectionFromTo (const Coord& from, const Coord& to){
-  return atan2(to.y - from.y, to.x - from.x);
 }
 
 int main(){
