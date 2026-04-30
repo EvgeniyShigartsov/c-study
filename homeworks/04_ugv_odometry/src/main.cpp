@@ -15,6 +15,11 @@ int main(int argc, char** argv)
 
   std::ifstream inputFile(argv[1]);
 
+  if (!inputFile.is_open()) {
+    std::cerr << argv[1] << " file not found." << std::endl;
+    return 1;
+  }
+
   const float distance_per_tick = 2 * M_PI * wheel_radius_m / ticks_per_revolution;
 
   long prev_timestamp_ms;
@@ -57,6 +62,11 @@ int main(int argc, char** argv)
     prev_br_ticks = br_ticks;
 
     std::cout << timestamp_ms << ' ' << x << ' ' << y << ' ' << theta << std::endl;
+  }
+
+  if (inputFile.fail() && !inputFile.eof()) {
+    std::cerr << argv[1] << " has incorrect data format." << std::endl;
+    return 1;
   }
 
   return 0;
