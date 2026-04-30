@@ -1,22 +1,49 @@
+#include <cmath>
 #include <iostream>
+#include <fstream>
 
-int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "usage: ugv_odometry <input_path>\n";
-        return 1;
-    }
+const int ticks_per_revolution = 1024;
+const float wheel_radius_m = 0.3f;
+const float wheelbase_m = 1.0f;
 
-    // TODO: implement wheel odometry for a 4-wheel differential-drive UGV.
-    //
-    // Parameters:
-    //   ticks_per_revolution = 1024
-    //   wheel_radius_m       = 0.3
-    //   wheelbase_m          = 1.0
-    //
-    // Input:  text file with 5 whitespace-separated numbers per line:
-    //         timestamp_ms fl_ticks fr_ticks bl_ticks br_ticks
-    // Output: same tabular format on stdout, starting from the second sample:
-    //         timestamp_ms x y theta
+int main(int argc, char** argv)
+{
+  if (argc != 2) {
+    std::cerr << "usage: ugv_odometry <input_path>\n";
+    return 1;
+  }
 
-    return 0;
+  std::ifstream file(argv[1]);
+
+  long prev_timestamp_ms;
+  long prev_fl_ticks, prev_fr_ticks;
+  long prev_bl_ticks, prev_br_ticks;
+  file >> prev_timestamp_ms >> prev_fl_ticks >> prev_fr_ticks >> prev_bl_ticks >> prev_br_ticks;
+
+  long timestamp_ms;
+  long fl_ticks, fr_ticks;
+  long bl_ticks, br_ticks;
+
+  bool endOfFile = false;
+
+  while (file >> timestamp_ms >> fl_ticks >> fr_ticks >> bl_ticks >> br_ticks) {
+    long delta_fl = fl_ticks - prev_fl_ticks;
+    long delta_fr = fr_ticks - prev_fr_ticks;
+
+    long delta_bl = bl_ticks - prev_bl_ticks;
+    long delta_br = br_ticks - prev_br_ticks;
+
+    long delta_left = (delta_fl + delta_bl) / 2;
+    long delta_right = (delta_fr + delta_br) / 2;
+
+    long distance_per_tick = 2 * M_PI * wheel_radius_m / ticks_per_revolution;
+
+    long delta_left_in_meters = delta_left * distance_per_tick;
+    long delta_right_in_meters = delta_right * distance_per_tick;
+
+    long distance = (delta_left_in_meters + delta_right_in_meters) / 2;
+    long dTheta = (delta_right_in_meters - delta_left_in_meters) / wheelbase_m;
+  }
+
+  return 0;
 }
