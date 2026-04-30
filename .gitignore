@@ -77,3 +77,13 @@ obj/
 # OS
 .DS_Store
 Thumbs.db
+
+# custom
+cMiltech_hardware_list.xlsx
+
+input.txt
+simulation.txt
+targets.txt
+output.txt
+config.json
+simulation.json
