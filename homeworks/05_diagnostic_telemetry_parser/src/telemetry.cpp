@@ -1,8 +1,9 @@
-#include "telemetry.hpp"
+#include "../include/telemetry.hpp"
 
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 // Debugging exercise notes:
 // this file intentionally contains four runtime defects.
@@ -84,6 +85,25 @@ Frame parse_frame(char line[])
   return frame;
 }
 
+bool validateFrameLine(const char line[MAX_LINE_LENGTH], const int frameN)
+{
+  std::istringstream lineStream(line);
+  std::string words;
+
+  int elementsCount = 0;
+
+  while (lineStream >> words) {
+    elementsCount++;
+  }
+
+  if (elementsCount != EXPECTED_FIELD_COUNT) {
+    std::cerr << "error: invalid frame at line " << frameN << ", expected " << EXPECTED_FIELD_COUNT << " fields ";
+    return false;
+  }
+
+  return true;
+}
+
 double compute_frame_rate_hz(const Frame frames[], int frame_count)
 {
   const long elapsed_ms = frames[frame_count - 1].timestamp_ms - frames[0].timestamp_ms;
@@ -103,8 +123,8 @@ int read_frames(const char* path, Frame frames[], int max_frames)
   char line[MAX_LINE_LENGTH];
 
   while (input.getline(line, MAX_LINE_LENGTH)) {
-    if (line[0] == '\0') {
-      continue;
+    if (!validateFrameLine(line, frame_count)) {
+      return 0;
     }
 
     if (frame_count < max_frames) {
