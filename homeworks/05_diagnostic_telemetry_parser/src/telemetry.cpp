@@ -39,65 +39,62 @@ int split_line(char line[], char* fields[], int max_fields)
   return count;
 }
 
-long parse_long(const char* text)
+bool parse_long(const char* text, long& out_value)
 {
   char* end = nullptr;
-  const long value = std::strtol(text, &end, 10);
+  out_value = std::strtol(text, &end, 10);
 
-  if (end == text) {
-    std::abort();
-  }
-
-  return value;
+  return end == text ? false : true;
 }
 
-int parse_int(const char* text)
+bool parse_int(const char* text, int& out_value)
 {
-  return static_cast<int>(parse_long(text));
+  long longN;
+
+  const bool isValid = parse_long(text, longN);
+  out_value = static_cast<int>(longN);
+
+  return isValid;
 }
 
-double parse_double(const char* text)
+bool parse_double(const char* text, double& out_value)
 {
   char* end = nullptr;
-  const double value = std::strtod(text, &end);
+  out_value = std::strtod(text, &end);
 
-  if (end == text) {
-    std::abort();
-  }
-
-  return value;
+  return end == text ? false : true;
 }
 
-Frame parse_frame(char line[])
+bool parse_frame(char line[], const int frameN, Frame& frame)
 {
   char* fields[EXPECTED_FIELD_COUNT] = {};
   const int field_count = split_line(line, fields, EXPECTED_FIELD_COUNT);
   (void)field_count;
 
-  Frame frame{};
-  frame.timestamp_ms = parse_long(fields[0]);
-  frame.seq = parse_int(fields[1]);
-  frame.voltage_v = parse_double(fields[2]);
-  frame.current_a = parse_double(fields[3]);
-  frame.temperature_c = parse_double(fields[4]);
-  frame.gps_fix = parse_int(fields[5]);
-  frame.satellites = parse_int(fields[6]);
-  return frame;
+  parse_long(fields[0], frame.timestamp_ms);
+  parse_int(fields[1], frame.seq);
+  parse_double(fields[2], frame.voltage_v);
+  parse_double(fields[3], frame.current_a);
+  parse_double(fields[4], frame.temperature_c);
+  parse_int(fields[5], frame.gps_fix);
+  parse_int(fields[6], frame.satellites);
+  return true;
 }
 
 bool validateFrameLine(const char line[MAX_LINE_LENGTH], const int frameN)
 {
   std::istringstream lineStream(line);
-  std::string words;
+  std::string word;
 
-  int elementsCount = 0;
+  int currentElement = 0;
 
-  while (lineStream >> words) {
-    elementsCount++;
+  while (lineStream >> word) {
+    currentElement++;
   }
 
-  if (elementsCount != EXPECTED_FIELD_COUNT) {
-    std::cerr << "error: invalid frame at line " << frameN << ", expected " << EXPECTED_FIELD_COUNT << " fields ";
+  if (currentElement != EXPECTED_FIELD_COUNT) {
+    std::cerr << "error: invalid frame at line " << frameN << ", expected " << EXPECTED_FIELD_COUNT
+              << " fields  but found: " << currentElement << std::endl;
     return false;
   }
 
@@ -123,12 +120,12 @@ int read_frames(const char* path, Frame frames[], int max_frames)
   char line[MAX_LINE_LENGTH];
 
   while (input.getline(line, MAX_LINE_LENGTH)) {
-    if (!validateFrameLine(line, frame_count)) {
+    if (!validateFrameLine(line, frame_count + 1)) {
       return 0;
     }
 
     if (frame_count < max_frames) {
-      frames[frame_count] = parse_frame(line);
+      const bool isFrameValid = parse_frame(line, frame_count + 1, frames[frame_count]);
       ++frame_count;
     }
   }
