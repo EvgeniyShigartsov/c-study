@@ -17,6 +17,12 @@ int main(int argc, char** argv)
     return 1;
   }
 
+  const bool isParsedFramesValid = validateParsedFrames(frames, MAX_TELEMETRY_FRAMES);
+
+  if (!isParsedFramesValid) {
+    return 1;
+  }
+
   const Summary summary = summarize(frames, frame_count);
   print_summary(summary);
 
