@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 
 // Debugging exercise notes:
 // this file intentionally contains four runtime defects.
@@ -71,6 +70,12 @@ bool parse_frame(char line[], const int frameN, Frame& frame)
   const int field_count = split_line(line, fields, EXPECTED_FIELD_COUNT);
   (void)field_count;
 
+  if (field_count != EXPECTED_FIELD_COUNT) {
+    std::cerr << "error: invalid frame at line " << frameN << ", expected " << EXPECTED_FIELD_COUNT << " fields  but found: " << field_count
+              << std::endl;
+    return false;
+  }
+
   parse_long(fields[0], frame.timestamp_ms);
   parse_int(fields[1], frame.seq);
   parse_double(fields[2], frame.voltage_v);
@@ -78,25 +83,6 @@ bool parse_frame(char line[], const int frameN, Frame& frame)
   parse_double(fields[4], frame.temperature_c);
   parse_int(fields[5], frame.gps_fix);
   parse_int(fields[6], frame.satellites);
-  return true;
-}
-
-bool validateFrameLine(const char line[MAX_LINE_LENGTH], const int frameN)
-{
-  std::istringstream lineStream(line);
-  std::string word;
-
-  int currentElement = 0;
-
-  while (lineStream >> word) {
-    currentElement++;
-  }
-
-  if (currentElement != EXPECTED_FIELD_COUNT) {
-    std::cerr << "error: invalid frame at line " << frameN << ", expected " << EXPECTED_FIELD_COUNT
-              << " fields  but found: " << currentElement << std::endl;
-    return false;
-  }
 
   return true;
 }
@@ -120,10 +106,6 @@ int read_frames(const char* path, Frame frames[], int max_frames)
   char line[MAX_LINE_LENGTH];
 
   while (input.getline(line, MAX_LINE_LENGTH)) {
-    if (!validateFrameLine(line, frame_count + 1)) {
-      return 0;
-    }
-
     if (frame_count < max_frames) {
       const bool isFrameValid = parse_frame(line, frame_count + 1, frames[frame_count]);
       ++frame_count;
