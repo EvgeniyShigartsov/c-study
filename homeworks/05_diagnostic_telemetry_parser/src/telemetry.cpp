@@ -1,6 +1,7 @@
 #include "../include/telemetry.hpp"
 
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 
@@ -64,25 +65,60 @@ bool parse_double(const char* text, double& out_value)
   return end == text ? false : true;
 }
 
-bool parse_frame(char line[], const int frameN, Frame& frame)
+bool parse_frame(char line[], const int frameN, Frame& out_frame)
 {
   char* fields[EXPECTED_FIELD_COUNT] = {};
   const int field_count = split_line(line, fields, EXPECTED_FIELD_COUNT);
   (void)field_count;
 
   if (field_count != EXPECTED_FIELD_COUNT) {
-    std::cerr << "error: invalid frame at line " << frameN << ", expected " << EXPECTED_FIELD_COUNT << " fields  but found: " << field_count
+    std::cerr << "error: invalid frame at line " << frameN << ", expected " << EXPECTED_FIELD_COUNT << " fields but found: " << field_count
               << std::endl;
     return false;
   }
 
-  parse_long(fields[0], frame.timestamp_ms);
-  parse_int(fields[1], frame.seq);
-  parse_double(fields[2], frame.voltage_v);
-  parse_double(fields[3], frame.current_a);
-  parse_double(fields[4], frame.temperature_c);
-  parse_int(fields[5], frame.gps_fix);
-  parse_int(fields[6], frame.satellites);
+  const char* field_names[EXPECTED_FIELD_COUNT] = {
+    "timestamp_ms",
+    "seq",
+    "voltage_v",
+    "current_a",
+    "temperature_c",
+    "gps_fix",
+    "satellites",
+  };
+
+  bool errorsFound = false;
+  char errorMsg[300];
+  sprintf(errorMsg, "Invalid frame values at line [%d] - ", frameN);
+
+  Frame localFrame = {};
+
+  const bool parseResults[EXPECTED_FIELD_COUNT] = {
+    parse_long(fields[0], localFrame.timestamp_ms),
+    parse_int(fields[1], localFrame.seq),
+    parse_double(fields[2], localFrame.voltage_v),
+    parse_double(fields[3], localFrame.current_a),
+    parse_double(fields[4], localFrame.temperature_c),
+    parse_int(fields[5], localFrame.gps_fix),
+    parse_int(fields[6], localFrame.satellites),
+  };
+
+  for (int i = 0; i < EXPECTED_FIELD_COUNT; i++) {
+    if (!parseResults[i]) {
+      char fieldError[30];
+      strcat(errorMsg, field_names[i]);
+      strcat(errorMsg, ", ");
+
+      errorsFound = true;
+    }
+  }
+
+  if (errorsFound) {
+    std::cout << errorMsg << std::endl;
+    return false;
+  }
+
+  out_frame = localFrame;
 
   return true;
 }
@@ -105,11 +141,21 @@ int read_frames(const char* path, Frame frames[], int max_frames)
   int frame_count = 0;
   char line[MAX_LINE_LENGTH];
 
+  bool isAllFramesValid = true;
+
   while (input.getline(line, MAX_LINE_LENGTH)) {
     if (frame_count < max_frames) {
       const bool isFrameValid = parse_frame(line, frame_count + 1, frames[frame_count]);
       ++frame_count;
+
+      if (!isFrameValid) {
+        isAllFramesValid = false;
+      }
     }
+  }
+
+  if (!isAllFramesValid) {
+    return 0;
   }
 
   return frame_count;
