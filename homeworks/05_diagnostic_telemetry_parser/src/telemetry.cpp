@@ -160,27 +160,27 @@ int read_frames(const char* path, Frame frames[], int max_frames)
   return frame_count;
 }
 
-bool validateParsedFrames(const Frame frames[], int max_frames)
+bool validateParsedFrames(const Frame frames[], int framesCout)
 {
   bool errorsFound = false;
 
-  for (int i = 0; i < max_frames; i++) {
+  for (int i = 0; i < framesCout; i++) {
     const Frame currentFrame = frames[i];
     const Frame prevFrame = frames[i - 1];
     bool isFrameValid = true;
 
     bool frameValidationResults[EXPECTED_FIELD_COUNT] = {
-      i == 0 ? true : currentFrame.timestamp_ms <= prevFrame.timestamp_ms,
+      i == 0 ? true : currentFrame.timestamp_ms > prevFrame.timestamp_ms,
       i == 0 ? true : currentFrame.seq - prevFrame.seq == 1,
       currentFrame.voltage_v > 0,
       true,  // current_a does not require validation
-      currentFrame.temperature_c < -40 || currentFrame.temperature_c > 120,
+      currentFrame.temperature_c > -40 || currentFrame.temperature_c < 120,
       currentFrame.gps_fix == 1 || currentFrame.gps_fix == 0,
       currentFrame.satellites >= 0,
     };
 
     char frameErrorMsg[400];
-    sprintf(frameErrorMsg, "Frame validation failed at line [%d], check validation rules. Invalid values: ", i);
+    sprintf(frameErrorMsg, "Frame validation failed at line [%d], check validation rules. Invalid values: ", i + 1);
 
     for (int j = 0; j < EXPECTED_FIELD_COUNT; j++) {
       if (!frameValidationResults[j]) {

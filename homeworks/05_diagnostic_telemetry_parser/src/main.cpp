@@ -17,7 +17,7 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  const bool isParsedFramesValid = validateParsedFrames(frames, MAX_TELEMETRY_FRAMES);
+  const bool isParsedFramesValid = validateParsedFrames(frames, frame_count);
 
   if (!isParsedFramesValid) {
     return 1;
