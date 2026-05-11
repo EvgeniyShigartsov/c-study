@@ -26,7 +26,6 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/aarch64-linux-gnu.cmake"
       }
-<<<<<<< HEAD
     },
     {
       "name": "release",
@@ -47,8 +46,6 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
-=======
->>>>>>> 1c52dcb3b40870b616dfd2c755f30813a21725df
     }
   ],
   "buildPresets": [
@@ -63,7 +60,6 @@
       "displayName": "Build ARM64 Debug",
       "description": "Зібрати ARM64 debug preset після cross-configure.",
       "configurePreset": "aarch64-debug"
-<<<<<<< HEAD
     },
     {
       "name": "release",
@@ -79,8 +75,3 @@
     }
   ]
 }
-=======
-    }
-  ]
-}
->>>>>>> 1c52dcb3b40870b616dfd2c755f30813a21725df

@@ -113,7 +113,7 @@ bool parse_frame(char line[], const int frameN, Frame& out_frame)
   }
 
   if (errorsFound) {
-    std::cout << errorMsg << std::endl;
+    std::cerr << errorMsg << std::endl;
     return false;
   }
 
@@ -192,7 +192,7 @@ bool validateParsedFrames(const Frame frames[], int framesCout)
     }
 
     if (!isFrameValid) {
-      std::cout << frameErrorMsg << std::endl;
+      std::cerr << frameErrorMsg << std::endl;
       errorsFound = true;
     }
   }
