@@ -8,9 +8,9 @@
       "name": "Debug homework_04: ugv_odometry",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/build/debug/homework_04/ugv_odometry",
+      "program": "${workspaceFolder}/build/debug/homeworks/04_ugv_odometry/ugv_odometry",
       "args": [
-        "${workspaceFolder}/homework_04/data/straight.txt"
+        "${workspaceFolder}/homeworks/04_ugv_odometry/data/straight.txt"
       ],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
