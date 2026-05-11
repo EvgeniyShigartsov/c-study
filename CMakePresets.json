@@ -36,6 +36,16 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "relwithdebinfo",
+      "displayName": "Release with debug info",
+      "description": "Release with debug info build",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/relwithdebinfo",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     }
   ],
   "buildPresets": [
@@ -56,6 +66,12 @@
       "displayName": "Build Release",
       "description": "Зібрати release preset після configure.",
       "configurePreset": "release"
+    },
+    {
+      "name": "relwithdebinfo",
+      "displayName": "Build Release with debug info",
+      "description": "Зібрати release with debug info preset після configure.",
+      "configurePreset": "relwithdebinfo"
     }
   ]
 }
