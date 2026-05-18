@@ -3,7 +3,6 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
-#include <fstream>
 
 float get_h(float t, float d, float g, float l, float m, float v0)
 {
@@ -23,60 +22,46 @@ float get_h(float t, float d, float g, float l, float m, float v0)
   return term1 + term2 + term3 - term4 + (t * v0);
 }
 
-int calculateFirePoint(const std::string pathToFile, FirePoint& out_firePoint)
+int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint)
 {
-  std::ifstream input(pathToFile);
-
-  float xd;
-  float yd;
-  float zd;
-  float targetX;
-  float targetY;
-  float v0;
-  float accelerationPath;
-  char ammo_name[12];
-
-  input >> xd >> yd >> zd >> targetX >> targetY >> v0 >> accelerationPath >> ammo_name;
-  input.close();
-
   float m;          // ammoMass
   float d;          // coeffAero
   float l;          // liftForce
   float g = 9.81f;  // gravity
 
-  if (strcmp(ammo_name, "VOG-17") == 0) {
+  if (strcmp(bi.ammo_name, "VOG-17") == 0) {
     m = 0.35;
     d = 0.07;
     l = 0.0;
   }
-  else if (strcmp(ammo_name, "M67") == 0) {
+  else if (strcmp(bi.ammo_name, "M67") == 0) {
     m = 0.6;
     d = 0.10;
     l = 0.0;
   }
-  else if (strcmp(ammo_name, "RKG-3") == 0) {
+  else if (strcmp(bi.ammo_name, "RKG-3") == 0) {
     m = 1.2;
     d = 0.10;
     l = 0.0;
   }
-  else if (strcmp(ammo_name, "GLIDING-VOG") == 0) {
+  else if (strcmp(bi.ammo_name, "GLIDING-VOG") == 0) {
     m = 0.45;
     d = 0.10;
     l = 1.0;
   }
-  else if (strcmp(ammo_name, "GLIDING-RKG") == 0) {
+  else if (strcmp(bi.ammo_name, "GLIDING-RKG") == 0) {
     m = 1.4;
     d = 0.10;
     l = 1.0;
   }
   else {
-    std::cerr << "Invalid ammo_name: " << ammo_name << std::endl;
+    std::cerr << "Invalid ammo_name: " << bi.ammo_name << std::endl;
     return 1;
   }
 
-  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
-  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
-  float c = (6 * pow(m, 2)) * zd;
+  float a = (d * g * m) - ((pow(d, 2) * 2) * l * bi.v0);
+  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * bi.v0);
+  float c = (6 * pow(m, 2)) * bi.zd;
 
   float p = -pow(b, 2) / (3 * pow(a, 2));
   float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
@@ -91,19 +76,19 @@ int calculateFirePoint(const std::string pathToFile, FirePoint& out_firePoint)
   float fi = acos(angCos);
 
   float t = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
-  float h = get_h(t, d, g, l, m, v0);
+  float h = get_h(t, d, g, l, m, bi.v0);
 
-  if (xd == targetX) {
-    xd = targetX - (h + accelerationPath);
+  if (bi.xd == bi.targetX) {
+    bi.xd = bi.targetX - (h + bi.accelerationPath);
   }
 
-  float D = sqrt(pow(targetX - xd, 2) + pow(targetY - yd, 2));  // Distance from drone to target
+  float D = sqrt(pow(bi.targetX - bi.xd, 2) + pow(bi.targetY - bi.yd, 2));  // Distance from drone to target
 
-  bool shouldMakeManeuver = h + accelerationPath > D;
+  bool shouldMakeManeuver = h + bi.accelerationPath > D;
 
-  float valid_xd = shouldMakeManeuver ? targetX - (targetX - xd) * (h + accelerationPath) / D : xd;
-  float valid_yd = shouldMakeManeuver ? targetY - (targetY - yd) * (h + accelerationPath) / D : yd;
-  float valid_D = shouldMakeManeuver ? sqrt(pow(targetX - valid_xd, 2) + pow(targetY - valid_yd, 2)) : D;
+  float valid_xd = shouldMakeManeuver ? bi.targetX - (bi.targetX - bi.xd) * (h + bi.accelerationPath) / D : bi.xd;
+  float valid_yd = shouldMakeManeuver ? bi.targetY - (bi.targetY - bi.yd) * (h + bi.accelerationPath) / D : bi.yd;
+  float valid_D = shouldMakeManeuver ? sqrt(pow(bi.targetX - valid_xd, 2) + pow(bi.targetY - valid_yd, 2)) : D;
 
   if (shouldMakeManeuver) {
     out_firePoint.hasManeuver = true;
@@ -113,8 +98,8 @@ int calculateFirePoint(const std::string pathToFile, FirePoint& out_firePoint)
 
   float ratio = (valid_D - h) / valid_D;
 
-  float fireX = valid_xd + (targetX - valid_xd) * ratio;
-  float fireY = valid_yd + (targetY - valid_yd) * ratio;
+  float fireX = valid_xd + (bi.targetX - valid_xd) * ratio;
+  float fireY = valid_yd + (bi.targetY - valid_yd) * ratio;
 
   out_firePoint.fireX = fireX;
   out_firePoint.fireY = fireY;

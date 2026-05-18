@@ -4,6 +4,22 @@
 #include <iostream>
 #include <fstream>
 
+int parseBallisticInput(std::string pathToFile, BallisticInput& out_bi)
+{
+  std::ifstream input(pathToFile);
+
+  if (!input.is_open()) {
+    std::cerr << "Input file was not found or unable to open, path: " << pathToFile << std::endl;
+    return 1;
+  }
+
+  input >> out_bi.xd >> out_bi.yd >> out_bi.zd >> out_bi.targetX >> out_bi.targetY >> out_bi.v0 >> out_bi.accelerationPath >>
+    out_bi.ammo_name;
+  input.close();
+
+  return 0;
+}
+
 int main(int argc, char** argv)
 {
   if (argc != 2) {
@@ -11,8 +27,15 @@ int main(int argc, char** argv)
     return 1;
   }
 
+  BallisticInput ballisticInput;
+  const int parseResult = parseBallisticInput(argv[1], ballisticInput);
+
+  if (parseResult != 0) {
+    return 1;
+  }
+
   FirePoint firePoint;
-  const int result = calculateFirePoint(argv[1], firePoint);
+  const int result = calculateFirePoint(ballisticInput, firePoint);
 
   if (result != 0) {
     return 1;
