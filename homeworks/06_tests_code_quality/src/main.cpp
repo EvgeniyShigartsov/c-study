@@ -35,9 +35,9 @@ int main(int argc, char** argv)
   }
 
   FirePoint firePoint;
-  const int result = calculateFirePoint(ballisticInput, firePoint);
+  calculateFirePoint(ballisticInput, firePoint);
 
-  if (result != 0) {
+  if (!firePoint.success) {
     return 1;
   }
 

@@ -56,6 +56,7 @@ int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint)
   }
   else {
     std::cerr << "Invalid ammo_name: " << bi.ammo_name << std::endl;
+    out_firePoint.success = false;
     return 1;
   }
 
@@ -70,6 +71,7 @@ int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint)
 
   if (angCos > 1.0f || angCos < -1.0f) {
     std::cerr << "arccos is out -1...1, value is: " << angCos << std::endl;
+    out_firePoint.success = false;
     return 1;
   }
 
@@ -103,6 +105,7 @@ int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint)
 
   out_firePoint.fireX = fireX;
   out_firePoint.fireY = fireY;
+  out_firePoint.success = true;
 
   return 0;
 }

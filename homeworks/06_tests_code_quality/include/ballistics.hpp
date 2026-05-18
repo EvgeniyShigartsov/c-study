@@ -1,13 +1,12 @@
 #pragma once
 
-#include <string>
-
 struct FirePoint {
   float fireX;
   float fireY;
   bool hasManeuver = false;
   float maneuverX;
   float maneuverY;
+  bool success;
 };
 
 struct BallisticInput {
