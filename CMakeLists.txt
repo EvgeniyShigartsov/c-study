@@ -12,3 +12,5 @@ add_subdirectory(homeworks/03_memory_basics)
 add_subdirectory(homeworks/04_ugv_odometry)
 add_subdirectory(homeworks/05_diagnostic_telemetry_parser)
 add_subdirectory(homeworks/06_tests_code_quality)
+
+enable_testing()
