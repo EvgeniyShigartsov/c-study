@@ -19,7 +19,7 @@ Checks: >
 
 # Аналізувати лише код домашніх робіт і типові source/include директорії,
 # а не системні headers або сторонні бібліотеки.
-HeaderFilterRegex: '(^|/)(homework_[0-9]+|include|src)/'
+HeaderFilterRegex: '.*/homeworks/[^/]+/(include|src|tests)/.*'
 
 # Зауваження static analyzer мають ламати перевірку: це найчастіше реальні баги.
 # Решта checks лишаються warning-ами, щоб clang-tidy був навчальним
