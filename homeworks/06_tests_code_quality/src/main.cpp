@@ -4,7 +4,7 @@
 #include <iostream>
 #include <fstream>
 
-int parseBallisticInput(std::string pathToFile, BallisticInput& out_bi)
+int parseBallisticInput(const std::string& pathToFile, BallisticInput& out_bi)
 {
   std::ifstream input(pathToFile);
 
@@ -27,8 +27,8 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  BallisticInput ballisticInput;
-  const int parseResult = parseBallisticInput(argv[1], ballisticInput);
+  BallisticInput ballisticInput{};
+  const int parseResult = parseBallisticInput(argv[1], ballisticInput);  // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
   if (parseResult != 0) {
     return 1;

@@ -17,6 +17,12 @@ Checks: >
   -readability-magic-numbers,
   misc-unused-using-decls,
 
+CheckOptions:
+  - key: readability-identifier-length.MinimumParameterNameLength
+    value: '2'
+  - key: readability-identifier-length.MinimumVariableNameLength
+    value: '2'
+
 # Аналізувати лише код домашніх робіт і типові source/include директорії,
 # а не системні headers або сторонні бібліотеки.
 HeaderFilterRegex: '.*/homeworks/[^/]+/(include|src|tests)/.*'

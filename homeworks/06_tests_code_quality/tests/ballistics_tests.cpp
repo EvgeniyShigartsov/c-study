@@ -24,7 +24,7 @@ TEST(Ballistics, ComputesValidFireXY)
 
 TEST(Ballistics, InvalidInputCase)
 {
-  const float mockBadInput = -1.0f;
+  const float mockBadInput = -1.0F;
 
   const BallisticInput bi = {
     .xd = mockBadInput,
