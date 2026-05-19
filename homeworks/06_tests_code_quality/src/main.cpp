@@ -9,7 +9,7 @@ int parseBallisticInput(const std::string& pathToFile, BallisticInput& out_bi)
   std::ifstream input(pathToFile);
 
   if (!input.is_open()) {
-    std::cerr << "Input file was not found or unable to open, path: " << pathToFile << std::endl;
+    std::cerr << "Input file was not found or unable to open, path: " << pathToFile << '\n';
     return 1;
   }
 
@@ -47,7 +47,7 @@ int main(int argc, char** argv)
     output << firePoint.maneuverX << ' ' << firePoint.maneuverY << ' ';
   }
 
-  output << firePoint.fireX << ' ' << firePoint.fireY << std::endl;
+  output << firePoint.fireX << ' ' << firePoint.fireY << '\n';
   output.close();
 
   return 0;

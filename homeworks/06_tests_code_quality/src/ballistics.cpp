@@ -58,7 +58,7 @@ int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint)
     l = 1.0;
   }
   else {
-    std::cerr << "Invalid ammo_name: " << static_cast<const char*>(bi.ammo_name) << std::endl;
+    std::cerr << "Invalid ammo_name: " << static_cast<const char*>(bi.ammo_name) << '\n';
     out_firePoint.success = false;
     return 1;
   }
@@ -74,16 +74,16 @@ int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint)
   // NOLINTEND(readability-identifier-length) formula values
 
   if (angCos > 1.0F || angCos < -1.0F) {
-    std::cerr << "arccos is out -1...1, value is: " << angCos << std::endl;
+    std::cerr << "arccos is out -1...1, value is: " << angCos << '\n';
     out_firePoint.success = false;
     return 1;
   }
 
-  // NOLINTBEGIN(readability-identifier-length) formula values
+  // NOLINTBEGIN(readability-identifier-length, modernize-use-std-numbers) formula values, std numbers not learned yet.
   float fi = acosf(angCos);
   float t = 2 * sqrtf(-p / 3) * cosf((fi + static_cast<float>(M_PI) * 4) / 3) - b / (3 * a);
   float h = get_h(t, d, g, l, m, bi.v0);
-  // NOLINTEND(readability-identifier-length) formula values
+  // NOLINTEND(readability-identifier-length, modernize-use-std-numbers)
 
   if (bi.xd == bi.targetX) {
     bi.xd = bi.targetX - (h + bi.accelerationPath);
