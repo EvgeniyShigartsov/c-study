@@ -2,7 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
-#include "json.hpp"
+#include "./third_party/json.hpp"
 
 #define ENABLE_LOG 1
 #define ENABLE_DEBUG 0
