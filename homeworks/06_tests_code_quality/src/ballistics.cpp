@@ -4,8 +4,8 @@
 #include <cstring>
 #include <iostream>
 
-float get_h(
-  float t, float d, float g, float l, float m, float v0)  // NOLINT(readability-identifier-length), formula values, easier to handle
+// NOLINTNEXTLINE(readability-identifier-length), formula values
+float get_h(float t, float d, float g, float l, float m, float v0)
 {
   float l2 = powf(l, 2);
   float l2p1 = l2 + 1;
@@ -25,73 +25,78 @@ float get_h(
 
 int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint)
 {
-  float m;          // ammoMass
-  float d;          // coeffAero
-  float l;          // liftForce
-  float g = 9.81f;  // gravity
+  // NOLINTBEGIN(readability-identifier-length) formula values
+  float m = 0.0F;
+  float d = 0.0F;
+  float l = 0.0F;
+  float g = 9.81F;
+  // NOLINTEND(readability-identifier-length) formula values
 
-  if (strcmp(bi.ammo_name, "VOG-17") == 0) {
+  if (strcmp(static_cast<const char*>(bi.ammo_name), "VOG-17") == 0) {
     m = 0.35;
     d = 0.07;
     l = 0.0;
   }
-  else if (strcmp(bi.ammo_name, "M67") == 0) {
+  else if (strcmp(static_cast<const char*>(bi.ammo_name), "M67") == 0) {
     m = 0.6;
     d = 0.10;
     l = 0.0;
   }
-  else if (strcmp(bi.ammo_name, "RKG-3") == 0) {
+  else if (strcmp(static_cast<const char*>(bi.ammo_name), "RKG-3") == 0) {
     m = 1.2;
     d = 0.10;
     l = 0.0;
   }
-  else if (strcmp(bi.ammo_name, "GLIDING-VOG") == 0) {
+  else if (strcmp(static_cast<const char*>(bi.ammo_name), "GLIDING-VOG") == 0) {
     m = 0.45;
     d = 0.10;
     l = 1.0;
   }
-  else if (strcmp(bi.ammo_name, "GLIDING-RKG") == 0) {
+  else if (strcmp(static_cast<const char*>(bi.ammo_name), "GLIDING-RKG") == 0) {
     m = 1.4;
     d = 0.10;
     l = 1.0;
   }
   else {
-    std::cerr << "Invalid ammo_name: " << bi.ammo_name << std::endl;
+    std::cerr << "Invalid ammo_name: " << static_cast<const char*>(bi.ammo_name) << std::endl;
     out_firePoint.success = false;
     return 1;
   }
 
-  float a = (d * g * m) - ((pow(d, 2) * 2) * l * bi.v0);
-  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * bi.v0);
-  float c = (6 * pow(m, 2)) * bi.zd;
+  // NOLINTBEGIN(readability-identifier-length) formula values
+  float a = (d * g * m) - ((powf(d, 2) * 2) * l * bi.v0);
+  float b = ((-3 * g) * (powf(m, 2))) + ((d * 3) * l * m * bi.v0);
+  float c = (6 * powf(m, 2)) * bi.zd;
 
-  float p = -pow(b, 2) / (3 * pow(a, 2));
-  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
+  float p = -powf(b, 2) / (3 * powf(a, 2));
+  float q = (2 * powf(b, 3)) / (27 * powf(a, 3)) + c / a;
+  float angCos = 3 * q / (2 * p) * sqrtf(-3 / p);
+  // NOLINTEND(readability-identifier-length) formula values
 
-  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
-
-  if (angCos > 1.0f || angCos < -1.0f) {
+  if (angCos > 1.0F || angCos < -1.0F) {
     std::cerr << "arccos is out -1...1, value is: " << angCos << std::endl;
     out_firePoint.success = false;
     return 1;
   }
 
-  float fi = acos(angCos);
-
-  float t = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
+  // NOLINTBEGIN(readability-identifier-length) formula values
+  float fi = acosf(angCos);
+  float t = 2 * sqrtf(-p / 3) * cosf((fi + static_cast<float>(M_PI) * 4) / 3) - b / (3 * a);
   float h = get_h(t, d, g, l, m, bi.v0);
+  // NOLINTEND(readability-identifier-length) formula values
 
   if (bi.xd == bi.targetX) {
     bi.xd = bi.targetX - (h + bi.accelerationPath);
   }
 
-  float D = sqrt(pow(bi.targetX - bi.xd, 2) + pow(bi.targetY - bi.yd, 2));  // Distance from drone to target
+  // NOLINTNEXTLINE(readability-identifier-length) formula value, distance from drone to target
+  float D = sqrtf(powf(bi.targetX - bi.xd, 2) + powf(bi.targetY - bi.yd, 2));
 
   bool shouldMakeManeuver = h + bi.accelerationPath > D;
 
   float valid_xd = shouldMakeManeuver ? bi.targetX - (bi.targetX - bi.xd) * (h + bi.accelerationPath) / D : bi.xd;
   float valid_yd = shouldMakeManeuver ? bi.targetY - (bi.targetY - bi.yd) * (h + bi.accelerationPath) / D : bi.yd;
-  float valid_D = shouldMakeManeuver ? sqrt(pow(bi.targetX - valid_xd, 2) + pow(bi.targetY - valid_yd, 2)) : D;
+  float valid_D = shouldMakeManeuver ? sqrtf(powf(bi.targetX - valid_xd, 2) + powf(bi.targetY - valid_yd, 2)) : D;
 
   if (shouldMakeManeuver) {
     out_firePoint.hasManeuver = true;

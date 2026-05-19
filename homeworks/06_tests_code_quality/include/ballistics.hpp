@@ -23,4 +23,4 @@ struct BallisticInput {
 float get_h(
   float t, float d, float g, float l, float m, float v0);  // NOLINT(readability-identifier-length), formula values, easier to handle.
 
-int calculateFirePoint(BallisticInput input, FirePoint& out_firePoint);
+int calculateFirePoint(BallisticInput bi, FirePoint& out_firePoint);

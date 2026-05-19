@@ -7,7 +7,7 @@ format:
 	find $(CURDIR)/homeworks -name "build" -prune -o -name "CMakeLists.txt" -print | xargs cmake-format -i
 
 lint:
-	run-clang-tidy -p build/debug -config-file=.devcontainer/.clang-tidy ./homeworks
+	run-clang-tidy -p build/debug ./homeworks
 
 test:
 	ctest --test-dir build/debug --output-on-failure
