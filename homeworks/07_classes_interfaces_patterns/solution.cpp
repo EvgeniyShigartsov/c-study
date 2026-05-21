@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstring>
 #include <iostream>
 #include <fstream>
@@ -20,6 +21,11 @@
 #endif
 
 using json = nlohmann::json;
+
+// Some rules are turned off because some thigs is not learned at this point, or requires a lot of time to refactor.
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
 
 const int BOMB_CHAR_COUNT = 12;
 const int MAX_STEPS = 10000;
@@ -51,7 +57,7 @@ struct Coord {
     Coord result{x / divider, y / divider};
     return result;
   }
-  bool operator==(const Coord& other) const { return fabs(x - other.x) < 1e-6f && fabs(y - other.y) < 1e-6f; }
+  bool operator==(const Coord& other) const { return fabsf(x - other.x) < 1e-6f && fabsf(y - other.y) < 1e-6f; }
 };
 
 struct DroneConfig {
@@ -86,7 +92,7 @@ struct SimStep {
 };
 
 struct Simulation {
-  Coord CURRENT_POS;
+  Coord CURRENT_POS = {0.0f, 0.0f};
   float CURRENT_TIME = 0.0f;
   float CURRENT_SPEED = 0.0f;
   float CURRENT_DIR;
@@ -103,11 +109,9 @@ struct Simulation {
   bool reachedManeuverPoint = false;
 
   Simulation(const Coord initialPos, const float initialDir, const float simTimeStep)
-  {
-    CURRENT_POS = initialPos;
-    CURRENT_DIR = initialDir;
-    simulationTimeStep = simTimeStep;
-  }
+    : CURRENT_POS(initialPos)
+    , CURRENT_DIR(initialDir)
+    , simulationTimeStep(simTimeStep){};
 
   void updateDroneXY()
   {
@@ -170,12 +174,12 @@ bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombP
   json ammoData;
   ammoFile >> ammoData;
 
-  const int ammoCount = ammoData.size();
-  BombParams* ammoList = new BombParams[ammoCount];
+  const size_t ammoCount = ammoData.size();
+  auto* ammoList = new BombParams[ammoCount];
   bool found = false;
 
   try {
-    for (int i = 0; i < ammoCount; i++) {
+    for (size_t i = 0; i < ammoCount; i++) {
       strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
       ammoList[i].mass = ammoData[i]["mass"];
       ammoList[i].drag = ammoData[i]["drag"];
@@ -186,7 +190,7 @@ bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombP
     LOG("ammo.json parse error: " << parseError.what());
   }
 
-  for (int i = 0; i < ammoCount; i++) {
+  for (size_t i = 0; i < ammoCount; i++) {
     const BombParams bomb = ammoList[i];
     if (strcmp(ammo_name, bomb.name) == 0) {
       out_bombParams = bomb;
@@ -195,8 +199,9 @@ bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombP
     }
   }
 
-  if (!found)
+  if (!found) {
     LOG("Invalid ammo_name: " << ammo_name);
+  }
 
   delete[] ammoList;
   ammoList = nullptr;
@@ -246,23 +251,23 @@ Coord** readTargets(int& out_TARGETS_COUNT, int& out_TARGET_MOVES_COUNT)
 bool setBombFlightTime(
   const float d, const float g, const float m, const float l, const float v0, const float zd, float& out_bombFlightTime)
 {
-  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
-  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
-  float c = (6 * pow(m, 2)) * zd;
+  float a = (d * g * m) - ((powf(d, 2) * 2) * l * v0);
+  float b = ((-3 * g) * (powf(m, 2))) + ((d * 3) * l * m * v0);
+  float c = (6 * powf(m, 2)) * zd;
 
-  float p = -pow(b, 2) / (3 * pow(a, 2));
-  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
+  float p = -powf(b, 2) / (3 * powf(a, 2));
+  float q = (2 * powf(b, 3)) / (27 * powf(a, 3)) + c / a;
 
-  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
+  float angCos = 3 * q / (2 * p) * sqrtf(-3 / p);
 
   if (angCos > 1.0f || angCos < -1.0f) {
     LOG("arccos is out -1...1, value is: " << angCos);
     return false;
   }
 
-  float fi = acos(angCos);
+  float fi = acosf(angCos);
 
-  out_bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
+  out_bombFlightTime = 2 * sqrtf(-p / 3) * cosf((fi + static_cast<float>(M_PI) * 4) / 3) - b / (3 * a);
 
   return true;
 }
@@ -619,3 +624,7 @@ int main()
 
   return 0;
 }
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
+// NOLINTEND(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
