@@ -123,7 +123,7 @@ struct InterpolationIndex {
 
 bool readDroneConfig(DroneConfig& out_config)
 {
-  std::ifstream config("config.json");
+  std::ifstream config("homeworks/07_classes_interfaces_patterns/config.json");
 
   if (!config.is_open()) {
     LOG("config.json not found.");
@@ -160,7 +160,13 @@ bool readDroneConfig(DroneConfig& out_config)
 
 bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombParams)
 {
-  std::ifstream ammoFile("ammo.json");
+  std::ifstream ammoFile("homeworks/07_classes_interfaces_patterns/ammo.json");
+
+  if (!ammoFile.is_open()) {
+    LOG("ammo.json not found.");
+    return false;
+  }
+
   json ammoData;
   ammoFile >> ammoData;
 
@@ -199,7 +205,7 @@ bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombP
 
 Coord** readTargets(int& out_TARGETS_COUNT, int& out_TARGET_MOVES_COUNT)
 {
-  std::ifstream targetsFile("targets.json");
+  std::ifstream targetsFile("homeworks/07_classes_interfaces_patterns/targets.json");
 
   if (!targetsFile.is_open()) {
     LOG("targets.json was not found.");
