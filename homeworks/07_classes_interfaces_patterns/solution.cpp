@@ -274,18 +274,18 @@ bool setBombFlightTime(
 
 float get_h(const float t, const float d, const float g, const float l, const float m, const float v0)
 {
-  float l2 = pow(l, 2);
+  float l2 = powf(l, 2);
   float l2p1 = l2 + 1;
 
-  float term1 = (pow(t, 3) * (6 * d * g * l * m - 6 * pow(d, 2) * (l2 - 1) * v0)) / (36 * pow(m, 2));
+  float term1 = (powf(t, 3) * (6 * d * g * l * m - 6 * powf(d, 2) * (l2 - 1) * v0)) / (36 * powf(m, 2));
 
-  float term2 = (pow(t, 5) * (3 * pow(d, 3) * g * pow(l, 3) * m - 3 * pow(d, 4) * l2 * l2p1 * v0)) / (36 * l2p1 * pow(m, 4));
+  float term2 = (powf(t, 5) * (3 * powf(d, 3) * g * powf(l, 3) * m - 3 * powf(d, 4) * l2 * l2p1 * v0)) / (36 * l2p1 * powf(m, 4));
 
-  float term3 = (pow(t, 4) * (3 * pow(d, 3) * (l2p1)*l2 * v0 + 6 * pow(d, 3) * l2p1 * pow(l, 4) * v0 -
-                              6 * pow(d, 2) * g * (pow(l, 4) + l2p1) * l * m)) /
-                (36 * pow(l2p1, 2) * pow(m, 3));
+  float term3 = (powf(t, 4) * (3 * powf(d, 3) * (l2p1)*l2 * v0 + 6 * powf(d, 3) * l2p1 * powf(l, 4) * v0 -
+                               6 * powf(d, 2) * g * (powf(l, 4) + l2p1) * l * m)) /
+                (36 * powf(l2p1, 2) * powf(m, 3));
 
-  float term4 = (d * pow(t, 2) * v0) / (m * 2);
+  float term4 = (d * powf(t, 2) * v0) / (m * 2);
 
   return term1 + term2 + term3 - term4 + (t * v0);
 }
@@ -307,9 +307,9 @@ Coord normalizeCoord(const Coord& coord)
 
 InterpolationIndex getInterpolationIndex(const float t, const float arrayTimeStep, const int targetMovesCount)
 {
-  const int idx = (int)(floor(t / arrayTimeStep)) % targetMovesCount;
+  const int idx = (int)(floorf(t / arrayTimeStep)) % targetMovesCount;
   const int next = (idx + 1) % targetMovesCount;
-  const float frac = (t - idx * arrayTimeStep) / arrayTimeStep;
+  const float frac = (t - static_cast<float>(idx) * arrayTimeStep) / arrayTimeStep;
 
   return {frac, idx, next};
 }
@@ -322,7 +322,7 @@ Coord getFirePoint(const Coord targetCoord, const Coord droneCoord, const float 
 
 float getDirectionFromTo(const Coord& from, const Coord& to)
 {
-  return atan2(to.y - from.y, to.x - from.x);
+  return atan2f(to.y - from.y, to.x - from.x);
 }
 
 void writeSimulation(const float droneXHistory[MAX_STEPS],
@@ -335,20 +335,24 @@ void writeSimulation(const float droneXHistory[MAX_STEPS],
   std::ofstream simulation("simulation.txt");
   simulation << steps << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneXHistory[i] << ' ' << droneYHistory[i] << ' ';
+  }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneDirHistory[i] << ' ';
+  }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneStateHistory[i] << ' ';
+  }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneSelectedTargetHistory[i] << ' ';
+  }
   simulation << std::endl;
 
   simulation.close();
@@ -388,13 +392,13 @@ void writeSimulationJson(const int totalSteps, const SimStep* steps)
 int main()
 {
   const float g = 9.81f;  // gravity
-  float bombFlightTime;
+  float bombFlightTime = 0.0f;
 
   int TARGETS_COUNT = 0;
   int TARGET_MOVES_COUNT = 0;
   Coord** targetsInTime = readTargets(TARGETS_COUNT, TARGET_MOVES_COUNT);
-  DroneConfig dc;
-  BombParams bp;
+  DroneConfig dc{};
+  BombParams bp{};
 
   if (!readDroneConfig(dc) || !readBombParams(dc.ammoName, bp) || targetsInTime == nullptr ||
       !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
@@ -405,7 +409,7 @@ int main()
   LOG("Ammo found: " << bp.name);
 
   const float h = get_h(bombFlightTime, bp.drag, g, bp.lift, bp.mass, dc.v0);
-  const float droneAcceleration = pow(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
+  const float droneAcceleration = powf(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
 
   Simulation sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
 
@@ -422,9 +426,9 @@ int main()
 
     int bestTarget = 0;
     float bestTime = -1.0f;
-    Coord bestFire;
-    Coord bestTargetPredictedXY;
-    Coord actualDist;
+    Coord bestFire{};
+    Coord bestTargetPredictedXY{};
+    Coord actualDist{};
 
     for (int i = 0; i < TARGETS_COUNT; i++) {
       const Coord targetCurrentXY =
@@ -453,7 +457,7 @@ int main()
         float timeToChangeTarget = 0.0f;  // STOPPED стан або deltaAngle < turnThreshold;
 
         const float dirToFire = getDirectionFromTo(sim.CURRENT_POS, predictedFire);
-        const float deltaAngle = fabs(dirToFire - sim.CURRENT_DIR);
+        const float deltaAngle = fabsf(dirToFire - sim.CURRENT_DIR);
 
         if (deltaAngle > dc.turnThreshold) {
           const float turningTime = deltaAngle / dc.angularSpeed;
@@ -504,8 +508,8 @@ int main()
         // дрон між ціллю і точкою скиду - треба відлетіти далі
         const float dirAwayFromTarget = getDirectionFromTo(bestTargetPredictedXY, sim.CURRENT_POS);
         sim.needsManeuver = true;
-        sim.maneuverPoint.x = sim.CURRENT_POS.x + (cos(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
-        sim.maneuverPoint.y = sim.CURRENT_POS.y + (sin(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
+        sim.maneuverPoint.x = sim.CURRENT_POS.x + (cosf(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
+        sim.maneuverPoint.y = sim.CURRENT_POS.y + (sinf(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
       }
     }
 
@@ -519,11 +523,13 @@ int main()
 
     // Перевірено кут повороту та змінено стан відповідно вибраної цілі
     const float dirToFire = getDirectionFromTo(sim.CURRENT_POS, actualDist);
-    const float deltaAngle = fabs(dirToFire - sim.CURRENT_DIR);
+    const float deltaAngle = fabsf(dirToFire - sim.CURRENT_DIR);
 
     if (deltaAngle > dc.turnThreshold) {
-      if (sim.CURRENT_STATE == MOVING || sim.CURRENT_STATE == ACCELERATING)
+      if (sim.CURRENT_STATE == MOVING || sim.CURRENT_STATE == ACCELERATING) {
         sim.CURRENT_STATE = DECELERATING;
+      }
+
       else if (sim.CURRENT_STATE == STOPPED) {
         sim.CURRENT_STATE = TURNING;
         sim.turningTimeLeft = deltaAngle / dc.angularSpeed;
