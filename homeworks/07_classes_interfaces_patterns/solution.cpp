@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <string>
 #include "./third_party/json.hpp"
 
 #define ENABLE_LOG 1
@@ -26,6 +27,7 @@ using json = nlohmann::json;
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 
 const int BOMB_CHAR_COUNT = 12;
 const int MAX_STEPS = 10000;
@@ -123,6 +125,85 @@ struct InterpolationIndex {
   float frac;
   int idx;
   int next;
+};
+
+class ITargetProvider {
+public:
+  virtual size_t getTargetCount() = 0;
+  virtual int getTarget(const int idx) = 0;
+  virtual ~ITargetProvider() = default;
+};
+
+class IBallisticSolver {
+public:
+  virtual int solve() = 0;
+  virtual ~IBallisticSolver() = default;
+};
+
+class IConfigLoader {
+public:
+  virtual int load() = 0;
+  virtual DroneConfig getConfig() = 0;
+  virtual BombParams getAmmoParams() = 0;
+  virtual ~IConfigLoader() = default;
+};
+
+class JsonTargetProvider : ITargetProvider {
+private:
+  bool isSuccesFullyLoaded = false;
+  Coord** targetsInTime = nullptr;
+  size_t TARGETS_COUNT = 0;
+  size_t TARGET_MOVES_COUNT = 0;
+
+  void cleanup()
+  {
+    if (targetsInTime != nullptr) {
+      for (size_t i = 0; i < TARGETS_COUNT; i++) {
+        delete[] targetsInTime[i];
+      }
+      delete[] targetsInTime;
+
+      targetsInTime = nullptr;
+    }
+  }
+
+public:
+  JsonTargetProvider(const std::string& pathToConfig)
+  {
+    std::ifstream targetsFile(pathToConfig);
+
+    if (!targetsFile.is_open()) {
+      LOG("targets.json was not found.");
+      return;
+    }
+
+    json targetsData;
+    targetsFile >> targetsData;
+
+    TARGETS_COUNT = targetsData["targetCount"];
+    TARGET_MOVES_COUNT = targetsData["timeSteps"];
+
+    targetsInTime = new Coord*[TARGETS_COUNT];
+
+    try {
+      for (size_t target = 0; target < TARGETS_COUNT; target++) {
+        targetsInTime[target] = new Coord[TARGET_MOVES_COUNT];
+        for (size_t move = 0; move < TARGET_MOVES_COUNT; move++) {
+          targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
+          targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
+        }
+      }
+    }
+    catch (const json::exception& parseError) {
+      LOG("targets.json parse error: " << parseError.what());
+      cleanup();
+    }
+  }
+  size_t getTargetCount() override { return TARGETS_COUNT; }
+  int getTarget(const int idx) override { return 0; }
+  bool isLoadSucces() const { return isSuccesFullyLoaded; }
+
+  virtual ~JsonTargetProvider() { cleanup(); }
 };
 
 bool readDroneConfig(DroneConfig& out_config)
@@ -631,6 +712,7 @@ int main()
   return 0;
 }
 
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
 // NOLINTEND(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
 // NOLINTEND(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
