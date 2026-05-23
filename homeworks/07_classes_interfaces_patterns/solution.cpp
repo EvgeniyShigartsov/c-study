@@ -127,10 +127,15 @@ struct InterpolationIndex {
   int next;
 };
 
+struct Target {
+  Coord pos;
+  Coord velocity;
+};
+
 class ITargetProvider {
 public:
-  virtual size_t getTargetCount() = 0;
-  virtual int getTarget(const int idx) = 0;
+  virtual int getTargetCount() = 0;
+  virtual Target getTarget(const float simCurrentTime, const int targetIndex) = 0;
   virtual ~ITargetProvider() = default;
 };
 
@@ -146,64 +151,6 @@ public:
   virtual DroneConfig getConfig() = 0;
   virtual BombParams getAmmoParams() = 0;
   virtual ~IConfigLoader() = default;
-};
-
-class JsonTargetProvider : ITargetProvider {
-private:
-  bool isSuccesFullyLoaded = false;
-  Coord** targetsInTime = nullptr;
-  size_t TARGETS_COUNT = 0;
-  size_t TARGET_MOVES_COUNT = 0;
-
-  void cleanup()
-  {
-    if (targetsInTime != nullptr) {
-      for (size_t i = 0; i < TARGETS_COUNT; i++) {
-        delete[] targetsInTime[i];
-      }
-      delete[] targetsInTime;
-
-      targetsInTime = nullptr;
-    }
-  }
-
-public:
-  JsonTargetProvider(const std::string& pathToConfig)
-  {
-    std::ifstream targetsFile(pathToConfig);
-
-    if (!targetsFile.is_open()) {
-      LOG("targets.json was not found.");
-      return;
-    }
-
-    json targetsData;
-    targetsFile >> targetsData;
-
-    TARGETS_COUNT = targetsData["targetCount"];
-    TARGET_MOVES_COUNT = targetsData["timeSteps"];
-
-    targetsInTime = new Coord*[TARGETS_COUNT];
-
-    try {
-      for (size_t target = 0; target < TARGETS_COUNT; target++) {
-        targetsInTime[target] = new Coord[TARGET_MOVES_COUNT];
-        for (size_t move = 0; move < TARGET_MOVES_COUNT; move++) {
-          targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
-          targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
-        }
-      }
-    }
-    catch (const json::exception& parseError) {
-      LOG("targets.json parse error: " << parseError.what());
-      cleanup();
-    }
-  }
-  size_t getTargetCount() override { return TARGETS_COUNT; }
-  int getTarget(const int idx) override { return 0; }
-  bool isLoadSucces() const { return isSuccesFullyLoaded; }
-
-  virtual ~JsonTargetProvider() { cleanup(); }
 };
 
 bool readDroneConfig(DroneConfig& out_config)
@@ -469,6 +416,83 @@ void writeSimulationJson(const int totalSteps, const SimStep* steps)
   std::ofstream outJsonFile("simulation.json");
   outJsonFile << out.dump(2);
 }
+
+class JsonTargetProvider : ITargetProvider {
+private:
+  bool isSuccesFullyLoaded = false;
+  Coord** targetsInTime = nullptr;
+  int TARGETS_COUNT = 0;
+  int TARGET_MOVES_COUNT = 0;
+  float arrayTimeStep = 0.0f;
+  float simTimeStep = 0.0f;
+
+  void cleanup()
+  {
+    if (targetsInTime != nullptr) {
+      for (int i = 0; i < TARGETS_COUNT; i++) {
+        delete[] targetsInTime[i];
+      }
+      delete[] targetsInTime;
+
+      targetsInTime = nullptr;
+    }
+  }
+
+public:
+  JsonTargetProvider(const std::string& pathToConfig, const DroneConfig& droneConfig)
+    : arrayTimeStep(droneConfig.arrayTimeStep)
+    , simTimeStep(droneConfig.simTimeStep)
+  {
+    std::ifstream targetsFile(pathToConfig);
+
+    if (!targetsFile.is_open()) {
+      LOG("targets.json was not found.");
+      return;
+    }
+
+    json targetsData;
+    targetsFile >> targetsData;
+
+    TARGETS_COUNT = targetsData["targetCount"];
+    TARGET_MOVES_COUNT = targetsData["timeSteps"];
+
+    targetsInTime = new Coord*[TARGETS_COUNT];
+
+    try {
+      for (int target = 0; target < TARGETS_COUNT; target++) {
+        targetsInTime[target] = new Coord[TARGET_MOVES_COUNT];
+        for (int move = 0; move < TARGET_MOVES_COUNT; move++) {
+          targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
+          targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
+        }
+      }
+      isSuccesFullyLoaded = true;
+    }
+    catch (const json::exception& parseError) {
+      LOG("targets.json parse error: " << parseError.what());
+      cleanup();
+    }
+  }
+  int getTargetCount() override { return TARGETS_COUNT; }
+  Target getTarget(const float simCurrentTime, const int targetIndex) override
+  {
+    const InterpolationIndex currentIndex = getInterpolationIndex(simCurrentTime, arrayTimeStep, TARGET_MOVES_COUNT);
+
+    const Coord targetCurrentXY =
+      interpolatePos(currentIndex.frac, targetsInTime[targetIndex][currentIndex.idx], targetsInTime[targetIndex][currentIndex.next]);
+
+    const InterpolationIndex nextIndex = getInterpolationIndex(simCurrentTime + simTimeStep, arrayTimeStep, TARGET_MOVES_COUNT);
+
+    const Coord targetNextXY =
+      interpolatePos(nextIndex.frac, targetsInTime[targetIndex][nextIndex.idx], targetsInTime[targetIndex][nextIndex.next]);
+    const Coord targetVelocity = (targetNextXY - targetCurrentXY) / simTimeStep;
+
+    return {.pos = targetCurrentXY, .velocity = targetVelocity};
+  }
+  bool isLoadSucces() const { return isSuccesFullyLoaded; }
+
+  virtual ~JsonTargetProvider() { cleanup(); }
+};
 
 int main()
 {
