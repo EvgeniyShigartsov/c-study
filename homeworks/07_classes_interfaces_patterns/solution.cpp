@@ -147,94 +147,11 @@ public:
 
 class IConfigLoader {
 public:
-  virtual int load() = 0;
+  virtual bool load(const std::string& droneConfigPath, const std::string& bombParamsPath) = 0;
   virtual DroneConfig getConfig() = 0;
   virtual BombParams getAmmoParams() = 0;
   virtual ~IConfigLoader() = default;
 };
-
-bool readDroneConfig(DroneConfig& out_config)
-{
-  std::ifstream config("homeworks/07_classes_interfaces_patterns/config.json");
-
-  if (!config.is_open()) {
-    LOG("config.json not found.");
-    return false;
-  }
-
-  try {
-    json data;
-    config >> data;
-
-    const std::string tmp = data["ammo"].get<std::string>();
-    strncpy(out_config.ammoName, tmp.c_str(), BOMB_CHAR_COUNT);
-
-    out_config.startPos.x = data["drone"]["position"]["x"];
-    out_config.startPos.y = data["drone"]["position"]["y"];
-    out_config.altitude = data["drone"]["altitude"];
-    out_config.initialDir = data["drone"]["initialDirection"];
-    out_config.v0 = data["drone"]["attackSpeed"];
-    out_config.accelerationPath = data["drone"]["accelerationPath"];
-    out_config.arrayTimeStep = data["targetArrayTimeStep"];
-    out_config.simTimeStep = data["simulation"]["timeStep"];
-    out_config.hitRadius = data["simulation"]["hitRadius"];
-    out_config.angularSpeed = data["drone"]["angularSpeed"];
-    out_config.turnThreshold = data["drone"]["turnThreshold"];
-  }
-  catch (const json::exception& parseError) {
-    LOG("config.json parse error: " << parseError.what());
-    return false;
-  }
-  config.close();
-
-  return true;
-}
-
-bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombParams)
-{
-  std::ifstream ammoFile("homeworks/07_classes_interfaces_patterns/ammo.json");
-
-  if (!ammoFile.is_open()) {
-    LOG("ammo.json not found.");
-    return false;
-  }
-
-  json ammoData;
-  ammoFile >> ammoData;
-
-  const size_t ammoCount = ammoData.size();
-  auto* ammoList = new BombParams[ammoCount];
-  bool found = false;
-
-  try {
-    for (size_t i = 0; i < ammoCount; i++) {
-      strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
-      ammoList[i].mass = ammoData[i]["mass"];
-      ammoList[i].drag = ammoData[i]["drag"];
-      ammoList[i].lift = ammoData[i]["lift"];
-    }
-  }
-  catch (const json::exception& parseError) {
-    LOG("ammo.json parse error: " << parseError.what());
-  }
-
-  for (size_t i = 0; i < ammoCount; i++) {
-    const BombParams bomb = ammoList[i];
-    if (strcmp(ammo_name, bomb.name) == 0) {
-      out_bombParams = bomb;
-      found = true;
-      break;
-    }
-  }
-
-  if (!found) {
-    LOG("Invalid ammo_name: " << ammo_name);
-  }
-
-  delete[] ammoList;
-  ammoList = nullptr;
-  return found;
-}
 
 bool setBombFlightTime(
   const float d, const float g, const float m, const float l, const float v0, const float zd, float& out_bombFlightTime)
@@ -460,24 +377,125 @@ public:
   virtual ~AnalyticalSolver() = default;
 };
 
+class FileConfigLoader : IConfigLoader {
+private:
+  DroneConfig droneConfig{};
+  BombParams bombParams{};
+
+  bool readDroneConfig(const std::string& pathToConfig)
+  {
+    std::ifstream config(pathToConfig);
+
+    if (!config.is_open()) {
+      LOG("drone config file not found. Given path: " << pathToConfig);
+      return false;
+    }
+
+    try {
+      json data;
+      config >> data;
+
+      const std::string tmp = data["ammo"].get<std::string>();
+      strncpy(droneConfig.ammoName, tmp.c_str(), BOMB_CHAR_COUNT);
+
+      droneConfig.startPos.x = data["drone"]["position"]["x"];
+      droneConfig.startPos.y = data["drone"]["position"]["y"];
+      droneConfig.altitude = data["drone"]["altitude"];
+      droneConfig.initialDir = data["drone"]["initialDirection"];
+      droneConfig.v0 = data["drone"]["attackSpeed"];
+      droneConfig.accelerationPath = data["drone"]["accelerationPath"];
+      droneConfig.arrayTimeStep = data["targetArrayTimeStep"];
+      droneConfig.simTimeStep = data["simulation"]["timeStep"];
+      droneConfig.hitRadius = data["simulation"]["hitRadius"];
+      droneConfig.angularSpeed = data["drone"]["angularSpeed"];
+      droneConfig.turnThreshold = data["drone"]["turnThreshold"];
+    }
+    catch (const json::exception& parseError) {
+      LOG("config.json parse error: " << parseError.what());
+      return false;
+    }
+    config.close();
+
+    return true;
+  }
+
+  bool readBombParams(const std::string& bombParamsPath)
+  {
+    std::ifstream ammoFile(bombParamsPath);
+
+    if (!ammoFile.is_open()) {
+      LOG("bomb params file not found. Given path: " << bombParamsPath);
+      return false;
+    }
+
+    json ammoData;
+    ammoFile >> ammoData;
+
+    const size_t ammoCount = ammoData.size();
+    auto* ammoList = new BombParams[ammoCount];
+    bool found = false;
+
+    try {
+      for (size_t i = 0; i < ammoCount; i++) {
+        strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
+        ammoList[i].mass = ammoData[i]["mass"];
+        ammoList[i].drag = ammoData[i]["drag"];
+        ammoList[i].lift = ammoData[i]["lift"];
+      }
+    }
+    catch (const json::exception& parseError) {
+      LOG(bombParamsPath << " parse error: " << parseError.what());
+    }
+
+    for (size_t i = 0; i < ammoCount; i++) {
+      const BombParams bomb = ammoList[i];
+      if (strcmp(droneConfig.ammoName, bomb.name) == 0) {
+        bombParams = bomb;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      LOG("Invalid ammo_name: " << droneConfig.ammoName);
+    }
+
+    delete[] ammoList;
+    ammoList = nullptr;
+    return found;
+  }
+
+public:
+  bool load(const std::string& pathToConfig, const std::string& bombParamsPath) override
+  {
+    const bool isConfigLoadOk = readDroneConfig(pathToConfig);
+    const bool isBombParamsLoadOk = readBombParams(bombParamsPath);
+
+    return isConfigLoadOk && isBombParamsLoadOk;
+  }
+
+  DroneConfig getConfig() override { return droneConfig; }
+  BombParams getAmmoParams() override { return bombParams; }
+  virtual ~FileConfigLoader() = default;
+};
+
 int main()
 {
   const float g = 9.81f;  // gravity
   float bombFlightTime = 0.0f;
 
-  DroneConfig dc{};
-
-  if (!readDroneConfig(dc)) {
+  FileConfigLoader configLoader{};
+  if (!configLoader.load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json")) {
     return 1;
   }
 
-  BombParams bp{};
+  const DroneConfig dc = configLoader.getConfig();
+  const BombParams bp = configLoader.getAmmoParams();
 
   JsonTargetProvider targetProvider{"homeworks/07_classes_interfaces_patterns/targets.json", dc};
   AnalyticalSolver analyticalSolver{};
 
-  if (!readBombParams(dc.ammoName, bp) || !targetProvider.isLoadSucces() ||
-      !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
+  if (!targetProvider.isLoadSucces() || !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
     return 1;
   }
 
