@@ -236,46 +236,6 @@ bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombP
   return found;
 }
 
-Coord** readTargets(int& out_TARGETS_COUNT, int& out_TARGET_MOVES_COUNT)
-{
-  std::ifstream targetsFile("homeworks/07_classes_interfaces_patterns/targets.json");
-
-  if (!targetsFile.is_open()) {
-    LOG("targets.json was not found.");
-    return nullptr;
-  }
-
-  json targetsData;
-  targetsFile >> targetsData;
-
-  out_TARGETS_COUNT = targetsData["targetCount"];
-  out_TARGET_MOVES_COUNT = targetsData["timeSteps"];
-
-  Coord** targetsInTime = new Coord*[out_TARGETS_COUNT];
-
-  try {
-    for (int target = 0; target < out_TARGETS_COUNT; target++) {
-      targetsInTime[target] = new Coord[out_TARGET_MOVES_COUNT];
-      for (int move = 0; move < out_TARGET_MOVES_COUNT; move++) {
-        targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
-        targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
-      }
-    }
-  }
-  catch (const json::exception& parseError) {
-    LOG("targets.json parse error: " << parseError.what());
-
-    for (int i = 0; i < out_TARGETS_COUNT; i++) {
-      delete[] targetsInTime[i];
-    }
-    delete[] targetsInTime;
-
-    targetsInTime = nullptr;
-  }
-
-  return targetsInTime;
-}
-
 bool setBombFlightTime(
   const float d, const float g, const float m, const float l, const float v0, const float zd, float& out_bombFlightTime)
 {
@@ -473,7 +433,7 @@ public:
       cleanup();
     }
   }
-  int getTargetCount() override { return TARGETS_COUNT; }
+
   Target getTarget(const float simCurrentTime, const int targetIndex) override
   {
     const InterpolationIndex currentIndex = getInterpolationIndex(simCurrentTime, arrayTimeStep, TARGET_MOVES_COUNT);
@@ -481,6 +441,7 @@ public:
     const Coord targetCurrentXY =
       interpolatePos(currentIndex.frac, targetsInTime[targetIndex][currentIndex.idx], targetsInTime[targetIndex][currentIndex.next]);
 
+    // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
     const InterpolationIndex nextIndex = getInterpolationIndex(simCurrentTime + simTimeStep, arrayTimeStep, TARGET_MOVES_COUNT);
 
     const Coord targetNextXY =
@@ -489,6 +450,7 @@ public:
 
     return {.pos = targetCurrentXY, .velocity = targetVelocity};
   }
+  int getTargetCount() override { return TARGETS_COUNT; }
   bool isLoadSucces() const { return isSuccesFullyLoaded; }
 
   virtual ~JsonTargetProvider() { cleanup(); }
@@ -499,13 +461,17 @@ int main()
   const float g = 9.81f;  // gravity
   float bombFlightTime = 0.0f;
 
-  int TARGETS_COUNT = 0;
-  int TARGET_MOVES_COUNT = 0;
-  Coord** targetsInTime = readTargets(TARGETS_COUNT, TARGET_MOVES_COUNT);
   DroneConfig dc{};
+
+  if (!readDroneConfig(dc)) {
+    return 1;
+  }
+
   BombParams bp{};
 
-  if (!readDroneConfig(dc) || !readBombParams(dc.ammoName, bp) || targetsInTime == nullptr ||
+  JsonTargetProvider targetProvider{"homeworks/07_classes_interfaces_patterns/targets.json", dc};
+
+  if (!readBombParams(dc.ammoName, bp) || !targetProvider.isLoadSucces() ||
       !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
     return 1;
   }
@@ -527,30 +493,24 @@ int main()
   SimStep* stepsLog = new SimStep[MAX_STEPS];
 
   while (sim.step <= MAX_STEPS && !sim.reachedFirePoint) {
-    const InterpolationIndex currentIndex = getInterpolationIndex(sim.CURRENT_TIME, dc.arrayTimeStep, TARGET_MOVES_COUNT);
-
     int bestTarget = 0;
     float bestTime = -1.0f;
     Coord bestFire{};
     Coord bestTargetPredictedXY{};
     Coord actualDist{};
 
-    for (int i = 0; i < TARGETS_COUNT; i++) {
-      const Coord targetCurrentXY =
-        interpolatePos(currentIndex.frac, targetsInTime[i][currentIndex.idx], targetsInTime[i][currentIndex.next]);
+    for (int i = 0; i < targetProvider.getTargetCount(); i++) {
+      const Target target = targetProvider.getTarget(sim.CURRENT_TIME, i);
 
       // 1. Розрахувати орієнтовний час прильоту дрона до точки скиду (totalTime) для поточної позиції цілі
-      Coord currentFire = getFirePoint(targetCurrentXY, sim.CURRENT_POS, h);
+      Coord currentFire = getFirePoint(target.pos, sim.CURRENT_POS, h);
       const float timeToCurrentFire = length(currentFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
-      const InterpolationIndex nextIndex = getInterpolationIndex(sim.CURRENT_TIME + dc.simTimeStep, dc.arrayTimeStep, TARGET_MOVES_COUNT);
-
-      const Coord targetNextXY = interpolatePos(nextIndex.frac, targetsInTime[i][nextIndex.idx], targetsInTime[i][nextIndex.next]);
-      const Coord targetVelocity = (targetNextXY - targetCurrentXY) / dc.simTimeStep;
+      // Дані вже у target.velocity
 
       // 3. Інтерполювати прогнозовану позицію цілі на момент currentTime + totalTime
-      const Coord targetPredictedXY = targetCurrentXY + targetVelocity * timeToCurrentFire;
+      const Coord targetPredictedXY = target.pos + target.velocity * timeToCurrentFire;
 
       // 4. Перерахувати балістику до прогнозованої позиції
       Coord predictedFire = getFirePoint(targetPredictedXY, sim.CURRENT_POS, h);
@@ -701,7 +661,7 @@ int main()
     droneSelectedTargetHistory[sim.step] = sim.selectedTargetIndex;
 
     const Coord dir = {cosf(sim.CURRENT_DIR), sinf(sim.CURRENT_DIR)};
-    const InterpolationIndex bombDropIndex = getInterpolationIndex(sim.CURRENT_TIME + bombFlightTime, dc.arrayTimeStep, TARGET_MOVES_COUNT);
+    const Target predictedTarget = targetProvider.getTarget(sim.CURRENT_TIME + bombFlightTime, sim.selectedTargetIndex);
 
     stepsLog[sim.step].pos = sim.CURRENT_POS;
     stepsLog[sim.step].direction = sim.CURRENT_DIR;
@@ -709,9 +669,7 @@ int main()
     stepsLog[sim.step].targetIdx = sim.selectedTargetIndex;
     stepsLog[sim.step].dropPoint = bestFire;
     stepsLog[sim.step].aimPoint = sim.CURRENT_POS + dir * h;
-    stepsLog[sim.step].predictedTarget = interpolatePos(bombDropIndex.frac,
-                                                        targetsInTime[sim.selectedTargetIndex][bombDropIndex.idx],
-                                                        targetsInTime[sim.selectedTargetIndex][bombDropIndex.next]);
+    stepsLog[sim.step].predictedTarget = predictedTarget.pos;
 
     sim.prevSelectedTargetIndex = sim.selectedTargetIndex;
     sim.CURRENT_TIME += dc.simTimeStep;
@@ -723,12 +681,6 @@ int main()
   writeSimulationJson(sim.step, stepsLog);
 
   LOG("Simulation complete. Steps: " << sim.step);
-
-  for (int i = 0; i < TARGETS_COUNT; i++) {
-    delete[] targetsInTime[i];
-  }
-  delete[] targetsInTime;
-  targetsInTime = nullptr;
 
   delete[] stepsLog;
   stepsLog = nullptr;
