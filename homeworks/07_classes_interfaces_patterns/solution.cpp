@@ -33,6 +33,9 @@ const int BOMB_CHAR_COUNT = 12;
 const int MAX_STEPS = 10000;
 
 enum DroneState { STOPPED, ACCELERATING, DECELERATING, TURNING, MOVING };
+enum class SolverType { ANALYTICAL };
+enum class ProviderType { JSON };
+enum class LoaderType { FILE };
 
 struct Coord {
   float x;
@@ -136,6 +139,7 @@ class ITargetProvider {
 public:
   virtual int getTargetCount() = 0;
   virtual Target getTarget(const float simCurrentTime, const int targetIndex) = 0;
+  virtual bool isLoadSucces() = 0;
   virtual ~ITargetProvider() = default;
 };
 
@@ -288,7 +292,7 @@ void writeSimulationJson(const int totalSteps, const SimStep* steps)
   outJsonFile << out.dump(2);
 }
 
-class JsonTargetProvider : ITargetProvider {
+class JsonTargetProvider : public ITargetProvider {
 private:
   bool isSuccesFullyLoaded = false;
   Coord** targetsInTime = nullptr;
@@ -362,12 +366,12 @@ public:
     return {.pos = targetCurrentXY, .velocity = targetVelocity};
   }
   int getTargetCount() override { return TARGETS_COUNT; }
-  bool isLoadSucces() const { return isSuccesFullyLoaded; }
+  bool isLoadSucces() override { return isSuccesFullyLoaded; }
 
   virtual ~JsonTargetProvider() { cleanup(); }
 };
 
-class AnalyticalSolver : IBallisticSolver {
+class AnalyticalSolver : public IBallisticSolver {
 public:
   Coord solve(const Coord targetCoord, const Coord droneCoord, const float h) override
   {
@@ -377,7 +381,7 @@ public:
   virtual ~AnalyticalSolver() = default;
 };
 
-class FileConfigLoader : IConfigLoader {
+class FileConfigLoader : public IConfigLoader {
 private:
   DroneConfig droneConfig{};
   BombParams bombParams{};
@@ -479,23 +483,54 @@ public:
   virtual ~FileConfigLoader() = default;
 };
 
+IConfigLoader* createLoader(LoaderType type)
+{
+  switch (type) {
+    case LoaderType::FILE:
+      return new FileConfigLoader;
+    default:
+      return nullptr;
+  }
+}
+
+IBallisticSolver* createSolver(SolverType type)
+{
+  switch (type) {
+    case SolverType::ANALYTICAL:
+      return new AnalyticalSolver;
+    default:
+      return nullptr;
+  }
+}
+
+ITargetProvider* createProvider(ProviderType type, const char* param, const DroneConfig& droneConfig)
+{
+  switch (type) {
+    case ProviderType::JSON:
+      return new JsonTargetProvider{param, droneConfig};
+    default:
+      return nullptr;
+  }
+}
+
 int main()
 {
   const float g = 9.81f;  // gravity
   float bombFlightTime = 0.0f;
 
-  FileConfigLoader configLoader{};
-  if (!configLoader.load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json")) {
+  IConfigLoader* configLoader = createLoader(LoaderType::FILE);
+
+  if (!configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json")) {
     return 1;
   }
 
-  const DroneConfig dc = configLoader.getConfig();
-  const BombParams bp = configLoader.getAmmoParams();
+  const DroneConfig dc = configLoader->getConfig();
+  const BombParams bp = configLoader->getAmmoParams();
 
-  JsonTargetProvider targetProvider{"homeworks/07_classes_interfaces_patterns/targets.json", dc};
-  AnalyticalSolver analyticalSolver{};
+  ITargetProvider* targetProvider = createProvider(ProviderType::JSON, "homeworks/07_classes_interfaces_patterns/targets.json", dc);
+  IBallisticSolver* solver = createSolver(SolverType::ANALYTICAL);
 
-  if (!targetProvider.isLoadSucces() || !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
+  if (!targetProvider->isLoadSucces() || !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
     return 1;
   }
 
@@ -522,11 +557,11 @@ int main()
     Coord bestTargetPredictedXY{};
     Coord actualDist{};
 
-    for (int i = 0; i < targetProvider.getTargetCount(); i++) {
-      const Target target = targetProvider.getTarget(sim.CURRENT_TIME, i);
+    for (int i = 0; i < targetProvider->getTargetCount(); i++) {
+      const Target target = targetProvider->getTarget(sim.CURRENT_TIME, i);
 
       // 1. Розрахувати орієнтовний час прильоту дрона до точки скиду (totalTime) для поточної позиції цілі
-      Coord currentFire = analyticalSolver.solve(target.pos, sim.CURRENT_POS, h);
+      Coord currentFire = solver->solve(target.pos, sim.CURRENT_POS, h);
       const float timeToCurrentFire = length(currentFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
@@ -536,7 +571,7 @@ int main()
       const Coord targetPredictedXY = target.pos + target.velocity * timeToCurrentFire;
 
       // 4. Перерахувати балістику до прогнозованої позиції
-      Coord predictedFire = analyticalSolver.solve(targetPredictedXY, sim.CURRENT_POS, h);
+      Coord predictedFire = solver->solve(targetPredictedXY, sim.CURRENT_POS, h);
       const float timeToPredictedFire = length(predictedFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       float totalTime = timeToPredictedFire;
@@ -684,7 +719,7 @@ int main()
     droneSelectedTargetHistory[sim.step] = sim.selectedTargetIndex;
 
     const Coord dir = {cosf(sim.CURRENT_DIR), sinf(sim.CURRENT_DIR)};
-    const Target predictedTarget = targetProvider.getTarget(sim.CURRENT_TIME + bombFlightTime, sim.selectedTargetIndex);
+    const Target predictedTarget = targetProvider->getTarget(sim.CURRENT_TIME + bombFlightTime, sim.selectedTargetIndex);
 
     stepsLog[sim.step].pos = sim.CURRENT_POS;
     stepsLog[sim.step].direction = sim.CURRENT_DIR;
@@ -707,6 +742,13 @@ int main()
 
   delete[] stepsLog;
   stepsLog = nullptr;
+
+  delete configLoader;
+  delete targetProvider;
+  delete solver;
+  configLoader = nullptr;
+  targetProvider = nullptr;
+  solver = nullptr;
 
   return 0;
 }
