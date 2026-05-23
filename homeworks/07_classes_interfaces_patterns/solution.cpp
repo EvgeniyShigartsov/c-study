@@ -141,7 +141,7 @@ public:
 
 class IBallisticSolver {
 public:
-  virtual int solve() = 0;
+  virtual Coord solve(const Coord targetCoord, const Coord droneCoord, const float h) = 0;
   virtual ~IBallisticSolver() = default;
 };
 
@@ -302,12 +302,6 @@ InterpolationIndex getInterpolationIndex(const float t, const float arrayTimeSte
   return {frac, idx, next};
 }
 
-Coord getFirePoint(const Coord targetCoord, const Coord droneCoord, const float h)
-{
-  const Coord delta = targetCoord - droneCoord;
-  return targetCoord - normalizeCoord(delta) * h;
-}
-
 float getDirectionFromTo(const Coord& from, const Coord& to)
 {
   return atan2f(to.y - from.y, to.x - from.x);
@@ -456,6 +450,16 @@ public:
   virtual ~JsonTargetProvider() { cleanup(); }
 };
 
+class AnalyticalSolver : IBallisticSolver {
+public:
+  Coord solve(const Coord targetCoord, const Coord droneCoord, const float h) override
+  {
+    const Coord delta = targetCoord - droneCoord;
+    return targetCoord - normalizeCoord(delta) * h;
+  }
+  virtual ~AnalyticalSolver() = default;
+};
+
 int main()
 {
   const float g = 9.81f;  // gravity
@@ -470,6 +474,7 @@ int main()
   BombParams bp{};
 
   JsonTargetProvider targetProvider{"homeworks/07_classes_interfaces_patterns/targets.json", dc};
+  AnalyticalSolver analyticalSolver{};
 
   if (!readBombParams(dc.ammoName, bp) || !targetProvider.isLoadSucces() ||
       !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
@@ -503,7 +508,7 @@ int main()
       const Target target = targetProvider.getTarget(sim.CURRENT_TIME, i);
 
       // 1. Розрахувати орієнтовний час прильоту дрона до точки скиду (totalTime) для поточної позиції цілі
-      Coord currentFire = getFirePoint(target.pos, sim.CURRENT_POS, h);
+      Coord currentFire = analyticalSolver.solve(target.pos, sim.CURRENT_POS, h);
       const float timeToCurrentFire = length(currentFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
@@ -513,7 +518,7 @@ int main()
       const Coord targetPredictedXY = target.pos + target.velocity * timeToCurrentFire;
 
       // 4. Перерахувати балістику до прогнозованої позиції
-      Coord predictedFire = getFirePoint(targetPredictedXY, sim.CURRENT_POS, h);
+      Coord predictedFire = analyticalSolver.solve(targetPredictedXY, sim.CURRENT_POS, h);
       const float timeToPredictedFire = length(predictedFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       float totalTime = timeToPredictedFire;
