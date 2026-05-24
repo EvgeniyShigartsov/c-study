@@ -31,6 +31,7 @@ using json = nlohmann::json;
 
 const int BOMB_CHAR_COUNT = 12;
 const int MAX_STEPS = 10000;
+const float GRAVITY = 9.81f;  // gravity
 
 enum DroneState { STOPPED, ACCELERATING, DECELERATING, TURNING, MOVING };
 enum class SolverType { ANALYTICAL };
@@ -100,11 +101,11 @@ struct Simulation {
   Coord CURRENT_POS = {0.0f, 0.0f};
   float CURRENT_TIME = 0.0f;
   float CURRENT_SPEED = 0.0f;
-  float CURRENT_DIR;
+  float CURRENT_DIR = 0.0f;
   DroneState CURRENT_STATE = STOPPED;
   Coord maneuverPoint = {0.0f, 0.0f};
   float turningTimeLeft = 0.0f;
-  float simulationTimeStep;
+  float simulationTimeStep = 0.0f;
 
   int selectedTargetIndex = 0;
   int prevSelectedTargetIndex = 0;
@@ -113,6 +114,7 @@ struct Simulation {
   bool needsManeuver = false;
   bool reachedManeuverPoint = false;
 
+  Simulation() = default;
   Simulation(const Coord initialPos, const float initialDir, const float simTimeStep)
     : CURRENT_POS(initialPos)
     , CURRENT_DIR(initialDir)
@@ -483,6 +485,48 @@ public:
   virtual ~FileConfigLoader() = default;
 };
 
+class MissionProcessor {
+private:
+  Simulation sim;
+  ITargetProvider* targetProvider;
+  IBallisticSolver* ballisticSolver;
+
+  DroneConfig dc{};
+  float bombFlightTime = 0.0f;
+  float h = 0.0f;
+  float droneAcceleration = 0.0f;
+
+public:
+  MissionProcessor(ITargetProvider* provider, IBallisticSolver* solver)
+    : targetProvider(provider)
+    , ballisticSolver(solver)
+  {
+  }
+  [[nodiscard]] bool init(IConfigLoader* configLoader)
+  {
+    const bool IS_CONFIG_OK =
+      configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json");
+
+    dc = configLoader->getConfig();
+    const BombParams bp = configLoader->getAmmoParams();
+
+    if (IS_CONFIG_OK) {
+      LOG("Config loaded: speed=" << dc.v0);
+      LOG("Ammo found: " << bp.name);
+    }
+    sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
+
+    const bool IS_BOMB_OK = setBombFlightTime(bp.drag, GRAVITY, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime);
+
+    h = get_h(bombFlightTime, bp.drag, GRAVITY, bp.lift, bp.mass, dc.v0);
+    droneAcceleration = powf(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
+
+    return IS_CONFIG_OK && IS_BOMB_OK;
+  }
+  [[nodiscard]] bool hasNext() const { return sim.step <= MAX_STEPS && !sim.reachedFirePoint; }
+  virtual ~MissionProcessor() = default;
+};
+
 IConfigLoader* createLoader(LoaderType type)
 {
   switch (type) {
@@ -515,30 +559,26 @@ ITargetProvider* createProvider(ProviderType type, const char* param, const Dron
 
 int main()
 {
-  const float g = 9.81f;  // gravity
-  float bombFlightTime = 0.0f;
-
   IConfigLoader* configLoader = createLoader(LoaderType::FILE);
 
-  if (!configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json")) {
-    return 1;
-  }
-
-  const DroneConfig dc = configLoader->getConfig();
-  const BombParams bp = configLoader->getAmmoParams();
+  const DroneConfig dc = configLoader->getConfig();  // TO DELETE
 
   ITargetProvider* targetProvider = createProvider(ProviderType::JSON, "homeworks/07_classes_interfaces_patterns/targets.json", dc);
   IBallisticSolver* solver = createSolver(SolverType::ANALYTICAL);
 
-  if (!targetProvider->isLoadSucces() || !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
+  if (!targetProvider->isLoadSucces()) {
     return 1;
   }
 
-  LOG("Config loaded: speed=" << dc.v0);
-  LOG("Ammo found: " << bp.name);
+  float bombFlightTime = 0.0000000000f;
+  const float h = 0.000000f;
+  const float droneAcceleration = 0.000000f;
 
-  const float h = get_h(bombFlightTime, bp.drag, g, bp.lift, bp.mass, dc.v0);
-  const float droneAcceleration = powf(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
+  MissionProcessor missionProcessor{targetProvider, solver};
+  const bool isInitSucces = missionProcessor.init(configLoader);
+  if (!isInitSucces) {
+    return 1;
+  }
 
   Simulation sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
 
@@ -550,7 +590,7 @@ int main()
 
   SimStep* stepsLog = new SimStep[MAX_STEPS];
 
-  while (sim.step <= MAX_STEPS && !sim.reachedFirePoint) {
+  while (missionProcessor.hasNext()) {
     int bestTarget = 0;
     float bestTime = -1.0f;
     Coord bestFire{};
