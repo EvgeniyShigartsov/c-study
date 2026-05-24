@@ -95,6 +95,7 @@ struct SimStep {
   float direction;
   DroneState state;
   int targetIdx;
+  int step;
 };
 
 struct Simulation {
@@ -135,6 +136,11 @@ struct InterpolationIndex {
 struct Target {
   Coord pos;
   Coord velocity;
+};
+
+struct MissionLog {
+  int stepsCount;
+  SimStep* stepsLog;
 };
 
 class ITargetProvider {
@@ -500,6 +506,9 @@ private:
   float bombFlightTime = 0.0f;
   float h = 0.0f;
   float droneAcceleration = 0.0f;
+  int targetsCount = 0;
+
+  SimStep* stepsLog = new SimStep[MAX_STEPS];
 
 public:
   MissionProcessor(ITargetProvider* provider, IBallisticSolver* solver)
@@ -517,88 +526,24 @@ public:
     sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
     h = get_h(bombFlightTime, bp.drag, GRAVITY, bp.lift, bp.mass, dc.v0);
     droneAcceleration = powf(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
+    targetsCount = targetProvider->getTargetCount();
 
     return IS_BOMB_OK;
   }
   [[nodiscard]] bool hasNext() const { return sim.step <= MAX_STEPS && !sim.reachedFirePoint; }
-  void changeSolver(IBallisticSolver* solver) { ballisticSolver = solver; }
-  virtual ~MissionProcessor() = default;
-};
-
-IConfigLoader* createLoader(LoaderType type)
-{
-  switch (type) {
-    case LoaderType::FILE:
-      return new FileConfigLoader;
-    default:
-      return nullptr;
-  }
-}
-
-IBallisticSolver* createSolver(SolverType type)
-{
-  switch (type) {
-    case SolverType::ANALYTICAL:
-      return new AnalyticalSolver;
-    default:
-      return nullptr;
-  }
-}
-
-ITargetProvider* createProvider(ProviderType type, const char* param, const DroneConfig& droneConfig)
-{
-  switch (type) {
-    case ProviderType::JSON:
-      return new JsonTargetProvider{param, droneConfig};
-    default:
-      return nullptr;
-  }
-}
-
-int main()
-{
-  IConfigLoader* configLoader = createLoader(LoaderType::FILE);
-  const bool isConfigLoadSuccess =
-    configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json");
-
-  const DroneConfig dc = configLoader->getConfig();  // TO DELETE
-
-  ITargetProvider* targetProvider =
-    createProvider(ProviderType::JSON, "homeworks/07_classes_interfaces_patterns/targets.json", configLoader->getConfig());
-  IBallisticSolver* solver = createSolver(SolverType::ANALYTICAL);
-
-  float bombFlightTime = 0.0000000000f;
-  const float h = 0.000000f;
-  const float droneAcceleration = 0.000000f;
-
-  MissionProcessor missionProcessor{targetProvider, solver};
-  const bool isInitSucces = missionProcessor.init(configLoader);
-  if (!isConfigLoadSuccess || !targetProvider->isLoadSucces() || !isInitSucces) {
-    return 1;
-  }
-
-  Simulation sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
-
-  float droneXHistory[MAX_STEPS] = {};
-  float droneYHistory[MAX_STEPS] = {};
-  float droneDirHistory[MAX_STEPS] = {};
-  DroneState droneStateHistory[MAX_STEPS] = {};
-  int droneSelectedTargetHistory[MAX_STEPS] = {};
-
-  SimStep* stepsLog = new SimStep[MAX_STEPS];
-
-  while (missionProcessor.hasNext()) {
+  SimStep step()
+  {
     int bestTarget = 0;
     float bestTime = -1.0f;
     Coord bestFire{};
     Coord bestTargetPredictedXY{};
     Coord actualDist{};
 
-    for (int i = 0; i < targetProvider->getTargetCount(); i++) {
+    for (int i = 0; i < targetsCount; i++) {
       const Target target = targetProvider->getTarget(sim.CURRENT_TIME, i);
 
       // 1. Розрахувати орієнтовний час прильоту дрона до точки скиду (totalTime) для поточної позиції цілі
-      Coord currentFire = solver->solve(target.pos, sim.CURRENT_POS, h);
+      Coord currentFire = ballisticSolver->solve(target.pos, sim.CURRENT_POS, h);
       const float timeToCurrentFire = length(currentFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
@@ -608,7 +553,7 @@ int main()
       const Coord targetPredictedXY = target.pos + target.velocity * timeToCurrentFire;
 
       // 4. Перерахувати балістику до прогнозованої позиції
-      Coord predictedFire = solver->solve(targetPredictedXY, sim.CURRENT_POS, h);
+      Coord predictedFire = ballisticSolver->solve(targetPredictedXY, sim.CURRENT_POS, h);
       const float timeToPredictedFire = length(predictedFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       float totalTime = timeToPredictedFire;
@@ -749,36 +694,106 @@ int main()
     DEBUG("Step " << sim.step << " pos=(" << sim.CURRENT_POS.x << "," << sim.CURRENT_POS.y << ")");
     DEBUG("  target=" << sim.selectedTargetIndex << " state=" << sim.CURRENT_STATE);
 
-    droneXHistory[sim.step] = sim.CURRENT_POS.x;
-    droneYHistory[sim.step] = sim.CURRENT_POS.y;
-    droneDirHistory[sim.step] = sim.CURRENT_DIR;
-    droneStateHistory[sim.step] = sim.CURRENT_STATE;
-    droneSelectedTargetHistory[sim.step] = sim.selectedTargetIndex;
-
     const Coord dir = {cosf(sim.CURRENT_DIR), sinf(sim.CURRENT_DIR)};
     const Target predictedTarget = targetProvider->getTarget(sim.CURRENT_TIME + bombFlightTime, sim.selectedTargetIndex);
 
-    stepsLog[sim.step].pos = sim.CURRENT_POS;
-    stepsLog[sim.step].direction = sim.CURRENT_DIR;
-    stepsLog[sim.step].state = sim.CURRENT_STATE;
-    stepsLog[sim.step].targetIdx = sim.selectedTargetIndex;
-    stepsLog[sim.step].dropPoint = bestFire;
-    stepsLog[sim.step].aimPoint = sim.CURRENT_POS + dir * h;
-    stepsLog[sim.step].predictedTarget = predictedTarget.pos;
+    const SimStep stepResult = {
+      .pos = sim.CURRENT_POS,
+      .dropPoint = bestFire,
+      .aimPoint = sim.CURRENT_POS + dir * h,
+      .predictedTarget = predictedTarget.pos,
+      .direction = sim.CURRENT_DIR,
+      .state = sim.CURRENT_STATE,
+      .targetIdx = sim.selectedTargetIndex,
+      .step = sim.step,
+    };
+
+    stepsLog[sim.step] = stepResult;
 
     sim.prevSelectedTargetIndex = sim.selectedTargetIndex;
     sim.CURRENT_TIME += dc.simTimeStep;
     sim.step++;
+
+    return stepResult;
+  }
+  void changeSolver(IBallisticSolver* solver) { ballisticSolver = solver; }
+  MissionLog getStepsLog() { return {.stepsCount = sim.step, .stepsLog = stepsLog}; }
+  virtual ~MissionProcessor()
+  {
+    delete[] stepsLog;
+    stepsLog = nullptr;
+  };
+};
+
+IConfigLoader* createLoader(LoaderType type)
+{
+  switch (type) {
+    case LoaderType::FILE:
+      return new FileConfigLoader;
+    default:
+      return nullptr;
+  }
+}
+
+IBallisticSolver* createSolver(SolverType type)
+{
+  switch (type) {
+    case SolverType::ANALYTICAL:
+      return new AnalyticalSolver;
+    default:
+      return nullptr;
+  }
+}
+
+ITargetProvider* createProvider(ProviderType type, const char* param, const DroneConfig& droneConfig)
+{
+  switch (type) {
+    case ProviderType::JSON:
+      return new JsonTargetProvider{param, droneConfig};
+    default:
+      return nullptr;
+  }
+}
+
+int main()
+{
+  IConfigLoader* configLoader = createLoader(LoaderType::FILE);
+  const bool isConfigLoadSuccess =
+    configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json");
+
+  ITargetProvider* targetProvider =
+    createProvider(ProviderType::JSON, "homeworks/07_classes_interfaces_patterns/targets.json", configLoader->getConfig());
+  IBallisticSolver* solver = createSolver(SolverType::ANALYTICAL);
+
+  MissionProcessor missionProcessor{targetProvider, solver};
+  const bool isInitSucces = missionProcessor.init(configLoader);
+  if (!isConfigLoadSuccess || !targetProvider->isLoadSucces() || !isInitSucces) {
+    return 1;
   }
 
-  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, sim.step);
+  float droneXHistory[MAX_STEPS] = {};
+  float droneYHistory[MAX_STEPS] = {};
+  float droneDirHistory[MAX_STEPS] = {};
+  DroneState droneStateHistory[MAX_STEPS] = {};
+  int droneSelectedTargetHistory[MAX_STEPS] = {};
 
-  writeSimulationJson(sim.step, stepsLog);
+  while (missionProcessor.hasNext()) {
+    const SimStep stepResult = missionProcessor.step();
 
-  LOG("Simulation complete. Steps: " << sim.step);
+    droneXHistory[stepResult.step] = stepResult.pos.x;
+    droneYHistory[stepResult.step] = stepResult.pos.y;
+    droneDirHistory[stepResult.step] = stepResult.direction;
+    droneStateHistory[stepResult.step] = stepResult.state;
+    droneSelectedTargetHistory[stepResult.step] = stepResult.targetIdx;
+  }
 
-  delete[] stepsLog;
-  stepsLog = nullptr;
+  const MissionLog missionLog = missionProcessor.getStepsLog();
+
+  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, missionLog.stepsCount);
+
+  writeSimulationJson(missionLog.stepsCount, missionLog.stepsLog);
+
+  LOG("Simulation complete. Steps: " << missionLog.stepsCount);
 
   delete configLoader;
   delete targetProvider;
