@@ -477,6 +477,11 @@ public:
     const bool isConfigLoadOk = readDroneConfig(pathToConfig);
     const bool isBombParamsLoadOk = readBombParams(bombParamsPath);
 
+    if (isConfigLoadOk && isBombParamsLoadOk) {
+      LOG("Config loaded: speed=" << droneConfig.v0);
+      LOG("Ammo found: " << bombParams.name);
+    }
+
     return isConfigLoadOk && isBombParamsLoadOk;
   }
 
@@ -504,26 +509,19 @@ public:
   }
   [[nodiscard]] bool init(IConfigLoader* configLoader)
   {
-    const bool IS_CONFIG_OK =
-      configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json");
-
     dc = configLoader->getConfig();
     const BombParams bp = configLoader->getAmmoParams();
 
-    if (IS_CONFIG_OK) {
-      LOG("Config loaded: speed=" << dc.v0);
-      LOG("Ammo found: " << bp.name);
-    }
-    sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
-
     const bool IS_BOMB_OK = setBombFlightTime(bp.drag, GRAVITY, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime);
 
+    sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
     h = get_h(bombFlightTime, bp.drag, GRAVITY, bp.lift, bp.mass, dc.v0);
     droneAcceleration = powf(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
 
-    return IS_CONFIG_OK && IS_BOMB_OK;
+    return IS_BOMB_OK;
   }
   [[nodiscard]] bool hasNext() const { return sim.step <= MAX_STEPS && !sim.reachedFirePoint; }
+  void changeSolver(IBallisticSolver* solver) { ballisticSolver = solver; }
   virtual ~MissionProcessor() = default;
 };
 
@@ -560,15 +558,14 @@ ITargetProvider* createProvider(ProviderType type, const char* param, const Dron
 int main()
 {
   IConfigLoader* configLoader = createLoader(LoaderType::FILE);
+  const bool isConfigLoadSuccess =
+    configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json");
 
   const DroneConfig dc = configLoader->getConfig();  // TO DELETE
 
-  ITargetProvider* targetProvider = createProvider(ProviderType::JSON, "homeworks/07_classes_interfaces_patterns/targets.json", dc);
+  ITargetProvider* targetProvider =
+    createProvider(ProviderType::JSON, "homeworks/07_classes_interfaces_patterns/targets.json", configLoader->getConfig());
   IBallisticSolver* solver = createSolver(SolverType::ANALYTICAL);
-
-  if (!targetProvider->isLoadSucces()) {
-    return 1;
-  }
 
   float bombFlightTime = 0.0000000000f;
   const float h = 0.000000f;
@@ -576,7 +573,7 @@ int main()
 
   MissionProcessor missionProcessor{targetProvider, solver};
   const bool isInitSucces = missionProcessor.init(configLoader);
-  if (!isInitSucces) {
+  if (!isConfigLoadSuccess || !targetProvider->isLoadSucces() || !isInitSucces) {
     return 1;
   }
 
