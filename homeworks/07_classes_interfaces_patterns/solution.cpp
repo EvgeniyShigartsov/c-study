@@ -772,6 +772,7 @@ int main()
     return 1;
   }
 
+  // Історія для зворотньої сумісності з .txt результатом симуляції.
   float droneXHistory[MAX_STEPS] = {};
   float droneYHistory[MAX_STEPS] = {};
   float droneDirHistory[MAX_STEPS] = {};
