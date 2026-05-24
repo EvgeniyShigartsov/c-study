@@ -1,7 +1,9 @@
+#include <cstddef>
 #include <cstring>
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include <string>
 #include "./third_party/json.hpp"
 
 #define ENABLE_LOG 1
@@ -21,10 +23,20 @@
 
 using json = nlohmann::json;
 
+// Some rules are turned off because some thigs is not learned at this point, or requires a lot of time to refactor.
+// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
+
 const int BOMB_CHAR_COUNT = 12;
 const int MAX_STEPS = 10000;
+const float GRAVITY = 9.81f;  // gravity
 
 enum DroneState { STOPPED, ACCELERATING, DECELERATING, TURNING, MOVING };
+enum class SolverType { ANALYTICAL };
+enum class ProviderType { JSON };
+enum class LoaderType { FILE };
 
 struct Coord {
   float x;
@@ -51,7 +63,7 @@ struct Coord {
     Coord result{x / divider, y / divider};
     return result;
   }
-  bool operator==(const Coord& other) const { return fabs(x - other.x) < 1e-6f && fabs(y - other.y) < 1e-6f; }
+  bool operator==(const Coord& other) const { return fabsf(x - other.x) < 1e-6f && fabsf(y - other.y) < 1e-6f; }
 };
 
 struct DroneConfig {
@@ -83,17 +95,18 @@ struct SimStep {
   float direction;
   DroneState state;
   int targetIdx;
+  int step;
 };
 
 struct Simulation {
-  Coord CURRENT_POS;
+  Coord CURRENT_POS = {0.0f, 0.0f};
   float CURRENT_TIME = 0.0f;
   float CURRENT_SPEED = 0.0f;
-  float CURRENT_DIR;
+  float CURRENT_DIR = 0.0f;
   DroneState CURRENT_STATE = STOPPED;
   Coord maneuverPoint = {0.0f, 0.0f};
   float turningTimeLeft = 0.0f;
-  float simulationTimeStep;
+  float simulationTimeStep = 0.0f;
 
   int selectedTargetIndex = 0;
   int prevSelectedTargetIndex = 0;
@@ -102,12 +115,11 @@ struct Simulation {
   bool needsManeuver = false;
   bool reachedManeuverPoint = false;
 
+  Simulation() = default;
   Simulation(const Coord initialPos, const float initialDir, const float simTimeStep)
-  {
-    CURRENT_POS = initialPos;
-    CURRENT_DIR = initialDir;
-    simulationTimeStep = simTimeStep;
-  }
+    : CURRENT_POS(initialPos)
+    , CURRENT_DIR(initialDir)
+    , simulationTimeStep(simTimeStep){};
 
   void updateDroneXY()
   {
@@ -121,160 +133,76 @@ struct InterpolationIndex {
   int next;
 };
 
-bool readDroneConfig(DroneConfig& out_config)
-{
-  std::ifstream config("config.json");
+struct Target {
+  Coord pos;
+  Coord velocity;
+};
 
-  if (!config.is_open()) {
-    LOG("config.json not found.");
-    return false;
-  }
+struct MissionLog {
+  int stepsCount;
+  SimStep* stepsLog;
+};
 
-  try {
-    json data;
-    config >> data;
+class ITargetProvider {
+public:
+  virtual int getTargetCount() = 0;
+  virtual Target getTarget(const float simCurrentTime, const int targetIndex) = 0;
+  virtual bool isLoadSucces() = 0;
+  virtual ~ITargetProvider() = default;
+};
 
-    const std::string tmp = data["ammo"].get<std::string>();
-    strncpy(out_config.ammoName, tmp.c_str(), BOMB_CHAR_COUNT);
+class IBallisticSolver {
+public:
+  virtual Coord solve(const Coord targetCoord, const Coord droneCoord, const float h) = 0;
+  virtual ~IBallisticSolver() = default;
+};
 
-    out_config.startPos.x = data["drone"]["position"]["x"];
-    out_config.startPos.y = data["drone"]["position"]["y"];
-    out_config.altitude = data["drone"]["altitude"];
-    out_config.initialDir = data["drone"]["initialDirection"];
-    out_config.v0 = data["drone"]["attackSpeed"];
-    out_config.accelerationPath = data["drone"]["accelerationPath"];
-    out_config.arrayTimeStep = data["targetArrayTimeStep"];
-    out_config.simTimeStep = data["simulation"]["timeStep"];
-    out_config.hitRadius = data["simulation"]["hitRadius"];
-    out_config.angularSpeed = data["drone"]["angularSpeed"];
-    out_config.turnThreshold = data["drone"]["turnThreshold"];
-  }
-  catch (const json::exception& parseError) {
-    LOG("config.json parse error: " << parseError.what());
-    return false;
-  }
-  config.close();
-
-  return true;
-}
-
-bool readBombParams(const char ammo_name[BOMB_CHAR_COUNT], BombParams& out_bombParams)
-{
-  std::ifstream ammoFile("ammo.json");
-  json ammoData;
-  ammoFile >> ammoData;
-
-  const int ammoCount = ammoData.size();
-  BombParams* ammoList = new BombParams[ammoCount];
-  bool found = false;
-
-  try {
-    for (int i = 0; i < ammoCount; i++) {
-      strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
-      ammoList[i].mass = ammoData[i]["mass"];
-      ammoList[i].drag = ammoData[i]["drag"];
-      ammoList[i].lift = ammoData[i]["lift"];
-    }
-  }
-  catch (const json::exception& parseError) {
-    LOG("ammo.json parse error: " << parseError.what());
-  }
-
-  for (int i = 0; i < ammoCount; i++) {
-    const BombParams bomb = ammoList[i];
-    if (strcmp(ammo_name, bomb.name) == 0) {
-      out_bombParams = bomb;
-      found = true;
-      break;
-    }
-  }
-
-  if (!found)
-    LOG("Invalid ammo_name: " << ammo_name);
-
-  delete[] ammoList;
-  ammoList = nullptr;
-  return found;
-}
-
-Coord** readTargets(int& out_TARGETS_COUNT, int& out_TARGET_MOVES_COUNT)
-{
-  std::ifstream targetsFile("targets.json");
-
-  if (!targetsFile.is_open()) {
-    LOG("targets.json was not found.");
-    return nullptr;
-  }
-
-  json targetsData;
-  targetsFile >> targetsData;
-
-  out_TARGETS_COUNT = targetsData["targetCount"];
-  out_TARGET_MOVES_COUNT = targetsData["timeSteps"];
-
-  Coord** targetsInTime = new Coord*[out_TARGETS_COUNT];
-
-  try {
-    for (int target = 0; target < out_TARGETS_COUNT; target++) {
-      targetsInTime[target] = new Coord[out_TARGET_MOVES_COUNT];
-      for (int move = 0; move < out_TARGET_MOVES_COUNT; move++) {
-        targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
-        targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
-      }
-    }
-  }
-  catch (const json::exception& parseError) {
-    LOG("targets.json parse error: " << parseError.what());
-
-    for (int i = 0; i < out_TARGETS_COUNT; i++) {
-      delete[] targetsInTime[i];
-    }
-    delete[] targetsInTime;
-
-    targetsInTime = nullptr;
-  }
-
-  return targetsInTime;
-}
+class IConfigLoader {
+public:
+  virtual bool load(const std::string& droneConfigPath, const std::string& bombParamsPath) = 0;
+  virtual DroneConfig getConfig() = 0;
+  virtual BombParams getAmmoParams() = 0;
+  virtual ~IConfigLoader() = default;
+};
 
 bool setBombFlightTime(
   const float d, const float g, const float m, const float l, const float v0, const float zd, float& out_bombFlightTime)
 {
-  float a = (d * g * m) - ((pow(d, 2) * 2) * l * v0);
-  float b = ((-3 * g) * (pow(m, 2))) + ((d * 3) * l * m * v0);
-  float c = (6 * pow(m, 2)) * zd;
+  float a = (d * g * m) - ((powf(d, 2) * 2) * l * v0);
+  float b = ((-3 * g) * (powf(m, 2))) + ((d * 3) * l * m * v0);
+  float c = (6 * powf(m, 2)) * zd;
 
-  float p = -pow(b, 2) / (3 * pow(a, 2));
-  float q = (2 * pow(b, 3)) / (27 * pow(a, 3)) + c / a;
+  float p = -powf(b, 2) / (3 * powf(a, 2));
+  float q = (2 * powf(b, 3)) / (27 * powf(a, 3)) + c / a;
 
-  float angCos = 3 * q / (2 * p) * sqrt(-3 / p);
+  float angCos = 3 * q / (2 * p) * sqrtf(-3 / p);
 
   if (angCos > 1.0f || angCos < -1.0f) {
     LOG("arccos is out -1...1, value is: " << angCos);
     return false;
   }
 
-  float fi = acos(angCos);
+  float fi = acosf(angCos);
 
-  out_bombFlightTime = 2 * sqrt(-p / 3) * cos((fi + M_PI * 4) / 3) - b / (3 * a);
+  out_bombFlightTime = 2 * sqrtf(-p / 3) * cosf((fi + static_cast<float>(M_PI) * 4) / 3) - b / (3 * a);
 
   return true;
 }
 
 float get_h(const float t, const float d, const float g, const float l, const float m, const float v0)
 {
-  float l2 = pow(l, 2);
+  float l2 = powf(l, 2);
   float l2p1 = l2 + 1;
 
-  float term1 = (pow(t, 3) * (6 * d * g * l * m - 6 * pow(d, 2) * (l2 - 1) * v0)) / (36 * pow(m, 2));
+  float term1 = (powf(t, 3) * (6 * d * g * l * m - 6 * powf(d, 2) * (l2 - 1) * v0)) / (36 * powf(m, 2));
 
-  float term2 = (pow(t, 5) * (3 * pow(d, 3) * g * pow(l, 3) * m - 3 * pow(d, 4) * l2 * l2p1 * v0)) / (36 * l2p1 * pow(m, 4));
+  float term2 = (powf(t, 5) * (3 * powf(d, 3) * g * powf(l, 3) * m - 3 * powf(d, 4) * l2 * l2p1 * v0)) / (36 * l2p1 * powf(m, 4));
 
-  float term3 = (pow(t, 4) * (3 * pow(d, 3) * (l2p1)*l2 * v0 + 6 * pow(d, 3) * l2p1 * pow(l, 4) * v0 -
-                              6 * pow(d, 2) * g * (pow(l, 4) + l2p1) * l * m)) /
-                (36 * pow(l2p1, 2) * pow(m, 3));
+  float term3 = (powf(t, 4) * (3 * powf(d, 3) * (l2p1)*l2 * v0 + 6 * powf(d, 3) * l2p1 * powf(l, 4) * v0 -
+                               6 * powf(d, 2) * g * (powf(l, 4) + l2p1) * l * m)) /
+                (36 * powf(l2p1, 2) * powf(m, 3));
 
-  float term4 = (d * pow(t, 2) * v0) / (m * 2);
+  float term4 = (d * powf(t, 2) * v0) / (m * 2);
 
   return term1 + term2 + term3 - term4 + (t * v0);
 }
@@ -296,22 +224,16 @@ Coord normalizeCoord(const Coord& coord)
 
 InterpolationIndex getInterpolationIndex(const float t, const float arrayTimeStep, const int targetMovesCount)
 {
-  const int idx = (int)(floor(t / arrayTimeStep)) % targetMovesCount;
+  const int idx = (int)(floorf(t / arrayTimeStep)) % targetMovesCount;
   const int next = (idx + 1) % targetMovesCount;
-  const float frac = (t - idx * arrayTimeStep) / arrayTimeStep;
+  const float frac = (t - static_cast<float>(idx) * arrayTimeStep) / arrayTimeStep;
 
   return {frac, idx, next};
 }
 
-Coord getFirePoint(const Coord targetCoord, const Coord droneCoord, const float h)
-{
-  const Coord delta = targetCoord - droneCoord;
-  return targetCoord - normalizeCoord(delta) * h;
-}
-
 float getDirectionFromTo(const Coord& from, const Coord& to)
 {
-  return atan2(to.y - from.y, to.x - from.x);
+  return atan2f(to.y - from.y, to.x - from.x);
 }
 
 void writeSimulation(const float droneXHistory[MAX_STEPS],
@@ -324,20 +246,24 @@ void writeSimulation(const float droneXHistory[MAX_STEPS],
   std::ofstream simulation("simulation.txt");
   simulation << steps << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneXHistory[i] << ' ' << droneYHistory[i] << ' ';
+  }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneDirHistory[i] << ' ';
+  }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneStateHistory[i] << ' ';
+  }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++)
+  for (int i = 0; i < steps; i++) {
     simulation << droneSelectedTargetHistory[i] << ' ';
+  }
   simulation << std::endl;
 
   simulation.close();
@@ -374,66 +300,260 @@ void writeSimulationJson(const int totalSteps, const SimStep* steps)
   outJsonFile << out.dump(2);
 }
 
-int main()
-{
-  const float g = 9.81f;  // gravity
-  float bombFlightTime;
-
+class JsonTargetProvider : public ITargetProvider {
+private:
+  bool isSuccesFullyLoaded = false;
+  Coord** targetsInTime = nullptr;
   int TARGETS_COUNT = 0;
   int TARGET_MOVES_COUNT = 0;
-  Coord** targetsInTime = readTargets(TARGETS_COUNT, TARGET_MOVES_COUNT);
-  DroneConfig dc;
-  BombParams bp;
+  float arrayTimeStep = 0.0f;
+  float simTimeStep = 0.0f;
 
-  if (!readDroneConfig(dc) || !readBombParams(dc.ammoName, bp) || targetsInTime == nullptr ||
-      !setBombFlightTime(bp.drag, g, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime)) {
-    return 1;
+  void cleanup()
+  {
+    if (targetsInTime != nullptr) {
+      for (int i = 0; i < TARGETS_COUNT; i++) {
+        delete[] targetsInTime[i];
+      }
+      delete[] targetsInTime;
+
+      targetsInTime = nullptr;
+    }
   }
 
-  LOG("Config loaded: speed=" << dc.v0);
-  LOG("Ammo found: " << bp.name);
+public:
+  JsonTargetProvider(const std::string& pathToConfig, const DroneConfig& droneConfig)
+    : arrayTimeStep(droneConfig.arrayTimeStep)
+    , simTimeStep(droneConfig.simTimeStep)
+  {
+    std::ifstream targetsFile(pathToConfig);
 
-  const float h = get_h(bombFlightTime, bp.drag, g, bp.lift, bp.mass, dc.v0);
-  const float droneAcceleration = pow(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
+    if (!targetsFile.is_open()) {
+      LOG("targets.json was not found.");
+      return;
+    }
 
-  Simulation sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
+    json targetsData;
+    targetsFile >> targetsData;
 
-  float droneXHistory[MAX_STEPS] = {};
-  float droneYHistory[MAX_STEPS] = {};
-  float droneDirHistory[MAX_STEPS] = {};
-  DroneState droneStateHistory[MAX_STEPS] = {};
-  int droneSelectedTargetHistory[MAX_STEPS] = {};
+    TARGETS_COUNT = targetsData["targetCount"];
+    TARGET_MOVES_COUNT = targetsData["timeSteps"];
+
+    targetsInTime = new Coord*[TARGETS_COUNT];
+
+    try {
+      for (int target = 0; target < TARGETS_COUNT; target++) {
+        targetsInTime[target] = new Coord[TARGET_MOVES_COUNT];
+        for (int move = 0; move < TARGET_MOVES_COUNT; move++) {
+          targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
+          targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
+        }
+      }
+      isSuccesFullyLoaded = true;
+    }
+    catch (const json::exception& parseError) {
+      LOG("targets.json parse error: " << parseError.what());
+      cleanup();
+    }
+  }
+
+  Target getTarget(const float simCurrentTime, const int targetIndex) override
+  {
+    const InterpolationIndex currentIndex = getInterpolationIndex(simCurrentTime, arrayTimeStep, TARGET_MOVES_COUNT);
+
+    const Coord targetCurrentXY =
+      interpolatePos(currentIndex.frac, targetsInTime[targetIndex][currentIndex.idx], targetsInTime[targetIndex][currentIndex.next]);
+
+    // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
+    const InterpolationIndex nextIndex = getInterpolationIndex(simCurrentTime + simTimeStep, arrayTimeStep, TARGET_MOVES_COUNT);
+
+    const Coord targetNextXY =
+      interpolatePos(nextIndex.frac, targetsInTime[targetIndex][nextIndex.idx], targetsInTime[targetIndex][nextIndex.next]);
+    const Coord targetVelocity = (targetNextXY - targetCurrentXY) / simTimeStep;
+
+    return {.pos = targetCurrentXY, .velocity = targetVelocity};
+  }
+  int getTargetCount() override { return TARGETS_COUNT; }
+  bool isLoadSucces() override { return isSuccesFullyLoaded; }
+
+  virtual ~JsonTargetProvider() { cleanup(); }
+};
+
+class AnalyticalSolver : public IBallisticSolver {
+public:
+  Coord solve(const Coord targetCoord, const Coord droneCoord, const float h) override
+  {
+    const Coord delta = targetCoord - droneCoord;
+    return targetCoord - normalizeCoord(delta) * h;
+  }
+  virtual ~AnalyticalSolver() = default;
+};
+
+class FileConfigLoader : public IConfigLoader {
+private:
+  DroneConfig droneConfig{};
+  BombParams bombParams{};
+
+  bool readDroneConfig(const std::string& pathToConfig)
+  {
+    std::ifstream config(pathToConfig);
+
+    if (!config.is_open()) {
+      LOG("drone config file not found. Given path: " << pathToConfig);
+      return false;
+    }
+
+    try {
+      json data;
+      config >> data;
+
+      const std::string tmp = data["ammo"].get<std::string>();
+      strncpy(droneConfig.ammoName, tmp.c_str(), BOMB_CHAR_COUNT);
+
+      droneConfig.startPos.x = data["drone"]["position"]["x"];
+      droneConfig.startPos.y = data["drone"]["position"]["y"];
+      droneConfig.altitude = data["drone"]["altitude"];
+      droneConfig.initialDir = data["drone"]["initialDirection"];
+      droneConfig.v0 = data["drone"]["attackSpeed"];
+      droneConfig.accelerationPath = data["drone"]["accelerationPath"];
+      droneConfig.arrayTimeStep = data["targetArrayTimeStep"];
+      droneConfig.simTimeStep = data["simulation"]["timeStep"];
+      droneConfig.hitRadius = data["simulation"]["hitRadius"];
+      droneConfig.angularSpeed = data["drone"]["angularSpeed"];
+      droneConfig.turnThreshold = data["drone"]["turnThreshold"];
+    }
+    catch (const json::exception& parseError) {
+      LOG("config.json parse error: " << parseError.what());
+      return false;
+    }
+    config.close();
+
+    return true;
+  }
+
+  bool readBombParams(const std::string& bombParamsPath)
+  {
+    std::ifstream ammoFile(bombParamsPath);
+
+    if (!ammoFile.is_open()) {
+      LOG("bomb params file not found. Given path: " << bombParamsPath);
+      return false;
+    }
+
+    json ammoData;
+    ammoFile >> ammoData;
+
+    const size_t ammoCount = ammoData.size();
+    auto* ammoList = new BombParams[ammoCount];
+    bool found = false;
+
+    try {
+      for (size_t i = 0; i < ammoCount; i++) {
+        strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
+        ammoList[i].mass = ammoData[i]["mass"];
+        ammoList[i].drag = ammoData[i]["drag"];
+        ammoList[i].lift = ammoData[i]["lift"];
+      }
+    }
+    catch (const json::exception& parseError) {
+      LOG(bombParamsPath << " parse error: " << parseError.what());
+    }
+
+    for (size_t i = 0; i < ammoCount; i++) {
+      const BombParams bomb = ammoList[i];
+      if (strcmp(droneConfig.ammoName, bomb.name) == 0) {
+        bombParams = bomb;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      LOG("Invalid ammo_name: " << droneConfig.ammoName);
+    }
+
+    delete[] ammoList;
+    ammoList = nullptr;
+    return found;
+  }
+
+public:
+  bool load(const std::string& pathToConfig, const std::string& bombParamsPath) override
+  {
+    const bool isConfigLoadOk = readDroneConfig(pathToConfig);
+    const bool isBombParamsLoadOk = readBombParams(bombParamsPath);
+
+    if (isConfigLoadOk && isBombParamsLoadOk) {
+      LOG("Config loaded: speed=" << droneConfig.v0);
+      LOG("Ammo found: " << bombParams.name);
+    }
+
+    return isConfigLoadOk && isBombParamsLoadOk;
+  }
+
+  DroneConfig getConfig() override { return droneConfig; }
+  BombParams getAmmoParams() override { return bombParams; }
+  virtual ~FileConfigLoader() = default;
+};
+
+class MissionProcessor {
+private:
+  Simulation sim;
+  ITargetProvider* targetProvider;
+  IBallisticSolver* ballisticSolver;
+
+  DroneConfig dc{};
+  float bombFlightTime = 0.0f;
+  float h = 0.0f;
+  float droneAcceleration = 0.0f;
+  int targetsCount = 0;
 
   SimStep* stepsLog = new SimStep[MAX_STEPS];
 
-  while (sim.step <= MAX_STEPS && !sim.reachedFirePoint) {
-    const InterpolationIndex currentIndex = getInterpolationIndex(sim.CURRENT_TIME, dc.arrayTimeStep, TARGET_MOVES_COUNT);
+public:
+  MissionProcessor(ITargetProvider* provider, IBallisticSolver* solver)
+    : targetProvider(provider)
+    , ballisticSolver(solver)
+  {
+  }
+  [[nodiscard]] bool init(IConfigLoader* configLoader)
+  {
+    dc = configLoader->getConfig();
+    const BombParams bp = configLoader->getAmmoParams();
 
+    const bool IS_BOMB_OK = setBombFlightTime(bp.drag, GRAVITY, bp.mass, bp.lift, dc.v0, dc.altitude, bombFlightTime);
+
+    sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep);
+    h = get_h(bombFlightTime, bp.drag, GRAVITY, bp.lift, bp.mass, dc.v0);
+    droneAcceleration = powf(dc.v0, 2) / (2 * dc.accelerationPath);  // (a)
+    targetsCount = targetProvider->getTargetCount();
+
+    return IS_BOMB_OK;
+  }
+  [[nodiscard]] bool hasNext() const { return sim.step <= MAX_STEPS && !sim.reachedFirePoint; }
+  SimStep step()
+  {
     int bestTarget = 0;
     float bestTime = -1.0f;
-    Coord bestFire;
-    Coord bestTargetPredictedXY;
-    Coord actualDist;
+    Coord bestFire{};
+    Coord bestTargetPredictedXY{};
+    Coord actualDist{};
 
-    for (int i = 0; i < TARGETS_COUNT; i++) {
-      const Coord targetCurrentXY =
-        interpolatePos(currentIndex.frac, targetsInTime[i][currentIndex.idx], targetsInTime[i][currentIndex.next]);
+    for (int i = 0; i < targetsCount; i++) {
+      const Target target = targetProvider->getTarget(sim.CURRENT_TIME, i);
 
       // 1. Розрахувати орієнтовний час прильоту дрона до точки скиду (totalTime) для поточної позиції цілі
-      Coord currentFire = getFirePoint(targetCurrentXY, sim.CURRENT_POS, h);
+      Coord currentFire = ballisticSolver->solve(target.pos, sim.CURRENT_POS, h);
       const float timeToCurrentFire = length(currentFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
-      const InterpolationIndex nextIndex = getInterpolationIndex(sim.CURRENT_TIME + dc.simTimeStep, dc.arrayTimeStep, TARGET_MOVES_COUNT);
-
-      const Coord targetNextXY = interpolatePos(nextIndex.frac, targetsInTime[i][nextIndex.idx], targetsInTime[i][nextIndex.next]);
-      const Coord targetVelocity = (targetNextXY - targetCurrentXY) / dc.simTimeStep;
+      // Дані вже у target.velocity
 
       // 3. Інтерполювати прогнозовану позицію цілі на момент currentTime + totalTime
-      const Coord targetPredictedXY = targetCurrentXY + targetVelocity * timeToCurrentFire;
+      const Coord targetPredictedXY = target.pos + target.velocity * timeToCurrentFire;
 
       // 4. Перерахувати балістику до прогнозованої позиції
-      Coord predictedFire = getFirePoint(targetPredictedXY, sim.CURRENT_POS, h);
+      Coord predictedFire = ballisticSolver->solve(targetPredictedXY, sim.CURRENT_POS, h);
       const float timeToPredictedFire = length(predictedFire - sim.CURRENT_POS) / dc.v0 + bombFlightTime;
 
       float totalTime = timeToPredictedFire;
@@ -442,7 +562,7 @@ int main()
         float timeToChangeTarget = 0.0f;  // STOPPED стан або deltaAngle < turnThreshold;
 
         const float dirToFire = getDirectionFromTo(sim.CURRENT_POS, predictedFire);
-        const float deltaAngle = fabs(dirToFire - sim.CURRENT_DIR);
+        const float deltaAngle = fabsf(dirToFire - sim.CURRENT_DIR);
 
         if (deltaAngle > dc.turnThreshold) {
           const float turningTime = deltaAngle / dc.angularSpeed;
@@ -493,8 +613,8 @@ int main()
         // дрон між ціллю і точкою скиду - треба відлетіти далі
         const float dirAwayFromTarget = getDirectionFromTo(bestTargetPredictedXY, sim.CURRENT_POS);
         sim.needsManeuver = true;
-        sim.maneuverPoint.x = sim.CURRENT_POS.x + (cos(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
-        sim.maneuverPoint.y = sim.CURRENT_POS.y + (sin(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
+        sim.maneuverPoint.x = sim.CURRENT_POS.x + (cosf(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
+        sim.maneuverPoint.y = sim.CURRENT_POS.y + (sinf(dirAwayFromTarget) * (h + dc.accelerationPath) * 2);
       }
     }
 
@@ -508,11 +628,13 @@ int main()
 
     // Перевірено кут повороту та змінено стан відповідно вибраної цілі
     const float dirToFire = getDirectionFromTo(sim.CURRENT_POS, actualDist);
-    const float deltaAngle = fabs(dirToFire - sim.CURRENT_DIR);
+    const float deltaAngle = fabsf(dirToFire - sim.CURRENT_DIR);
 
     if (deltaAngle > dc.turnThreshold) {
-      if (sim.CURRENT_STATE == MOVING || sim.CURRENT_STATE == ACCELERATING)
+      if (sim.CURRENT_STATE == MOVING || sim.CURRENT_STATE == ACCELERATING) {
         sim.CURRENT_STATE = DECELERATING;
+      }
+
       else if (sim.CURRENT_STATE == STOPPED) {
         sim.CURRENT_STATE = TURNING;
         sim.turningTimeLeft = deltaAngle / dc.angularSpeed;
@@ -572,44 +694,122 @@ int main()
     DEBUG("Step " << sim.step << " pos=(" << sim.CURRENT_POS.x << "," << sim.CURRENT_POS.y << ")");
     DEBUG("  target=" << sim.selectedTargetIndex << " state=" << sim.CURRENT_STATE);
 
-    droneXHistory[sim.step] = sim.CURRENT_POS.x;
-    droneYHistory[sim.step] = sim.CURRENT_POS.y;
-    droneDirHistory[sim.step] = sim.CURRENT_DIR;
-    droneStateHistory[sim.step] = sim.CURRENT_STATE;
-    droneSelectedTargetHistory[sim.step] = sim.selectedTargetIndex;
-
     const Coord dir = {cosf(sim.CURRENT_DIR), sinf(sim.CURRENT_DIR)};
-    const InterpolationIndex bombDropIndex = getInterpolationIndex(sim.CURRENT_TIME + bombFlightTime, dc.arrayTimeStep, TARGET_MOVES_COUNT);
+    const Target predictedTarget = targetProvider->getTarget(sim.CURRENT_TIME + bombFlightTime, sim.selectedTargetIndex);
 
-    stepsLog[sim.step].pos = sim.CURRENT_POS;
-    stepsLog[sim.step].direction = sim.CURRENT_DIR;
-    stepsLog[sim.step].state = sim.CURRENT_STATE;
-    stepsLog[sim.step].targetIdx = sim.selectedTargetIndex;
-    stepsLog[sim.step].dropPoint = bestFire;
-    stepsLog[sim.step].aimPoint = sim.CURRENT_POS + dir * h;
-    stepsLog[sim.step].predictedTarget = interpolatePos(bombDropIndex.frac,
-                                                        targetsInTime[sim.selectedTargetIndex][bombDropIndex.idx],
-                                                        targetsInTime[sim.selectedTargetIndex][bombDropIndex.next]);
+    const SimStep stepResult = {
+      .pos = sim.CURRENT_POS,
+      .dropPoint = bestFire,
+      .aimPoint = sim.CURRENT_POS + dir * h,
+      .predictedTarget = predictedTarget.pos,
+      .direction = sim.CURRENT_DIR,
+      .state = sim.CURRENT_STATE,
+      .targetIdx = sim.selectedTargetIndex,
+      .step = sim.step,
+    };
+
+    stepsLog[sim.step] = stepResult;
 
     sim.prevSelectedTargetIndex = sim.selectedTargetIndex;
     sim.CURRENT_TIME += dc.simTimeStep;
     sim.step++;
+
+    return stepResult;
+  }
+  void changeSolver(IBallisticSolver* solver) { ballisticSolver = solver; }
+  void reset() { sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep); }
+  MissionLog getStepsLog() { return {.stepsCount = sim.step, .stepsLog = stepsLog}; }
+  virtual ~MissionProcessor()
+  {
+    delete[] stepsLog;
+    stepsLog = nullptr;
+  };
+};
+
+IConfigLoader* createLoader(LoaderType type)
+{
+  switch (type) {
+    case LoaderType::FILE:
+      return new FileConfigLoader;
+    default:
+      return nullptr;
+  }
+}
+
+IBallisticSolver* createSolver(SolverType type)
+{
+  switch (type) {
+    case SolverType::ANALYTICAL:
+      return new AnalyticalSolver;
+    default:
+      return nullptr;
+  }
+}
+
+ITargetProvider* createProvider(ProviderType type, const char* param, const DroneConfig& droneConfig)
+{
+  switch (type) {
+    case ProviderType::JSON:
+      return new JsonTargetProvider{param, droneConfig};
+    default:
+      return nullptr;
+  }
+}
+
+int main()
+{
+  IConfigLoader* configLoader = createLoader(LoaderType::FILE);
+  const bool isConfigLoadSuccess =
+    configLoader->load("homeworks/07_classes_interfaces_patterns/config.json", "homeworks/07_classes_interfaces_patterns/ammo.json");
+
+  ITargetProvider* targetProvider =
+    createProvider(ProviderType::JSON, "homeworks/07_classes_interfaces_patterns/targets.json", configLoader->getConfig());
+  IBallisticSolver* solver = createSolver(SolverType::ANALYTICAL);
+
+  MissionProcessor missionProcessor{targetProvider, solver};
+  const bool isInitSucces = missionProcessor.init(configLoader);
+  if (!isConfigLoadSuccess || !targetProvider->isLoadSucces() || !isInitSucces) {
+    return 1;
   }
 
-  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, sim.step);
+  // Історія для зворотньої сумісності з .txt результатом симуляції.
+  float droneXHistory[MAX_STEPS] = {};
+  float droneYHistory[MAX_STEPS] = {};
+  float droneDirHistory[MAX_STEPS] = {};
+  DroneState droneStateHistory[MAX_STEPS] = {};
+  int droneSelectedTargetHistory[MAX_STEPS] = {};
 
-  writeSimulationJson(sim.step, stepsLog);
+  while (missionProcessor.hasNext()) {
+    const SimStep stepResult = missionProcessor.step();
 
-  LOG("Simulation complete. Steps: " << sim.step);
-
-  for (int i = 0; i < TARGETS_COUNT; i++) {
-    delete[] targetsInTime[i];
+    droneXHistory[stepResult.step] = stepResult.pos.x;
+    droneYHistory[stepResult.step] = stepResult.pos.y;
+    droneDirHistory[stepResult.step] = stepResult.direction;
+    droneStateHistory[stepResult.step] = stepResult.state;
+    droneSelectedTargetHistory[stepResult.step] = stepResult.targetIdx;
   }
-  delete[] targetsInTime;
-  targetsInTime = nullptr;
 
-  delete[] stepsLog;
-  stepsLog = nullptr;
+  const MissionLog missionLog = missionProcessor.getStepsLog();
+
+  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, missionLog.stepsCount);
+
+  writeSimulationJson(missionLog.stepsCount, missionLog.stepsLog);
+
+  LOG("Simulation complete. Steps: " << missionLog.stepsCount);
+
+  missionProcessor.reset();
+
+  delete configLoader;
+  delete targetProvider;
+  delete solver;
+  configLoader = nullptr;
+  targetProvider = nullptr;
+  solver = nullptr;
 
   return 0;
 }
+
+// NOLINTEND(cppcoreguidelines-special-member-functions)
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
+// NOLINTEND(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
+// NOLINTEND(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
