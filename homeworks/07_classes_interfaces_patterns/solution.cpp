@@ -717,6 +717,7 @@ public:
     return stepResult;
   }
   void changeSolver(IBallisticSolver* solver) { ballisticSolver = solver; }
+  void reset() { sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep); }
   MissionLog getStepsLog() { return {.stepsCount = sim.step, .stepsLog = stepsLog}; }
   virtual ~MissionProcessor()
   {
@@ -794,6 +795,8 @@ int main()
   writeSimulationJson(missionLog.stepsCount, missionLog.stepsLog);
 
   LOG("Simulation complete. Steps: " << missionLog.stepsCount);
+
+  missionProcessor.reset();
 
   delete configLoader;
   delete targetProvider;
