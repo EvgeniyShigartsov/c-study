@@ -24,12 +24,11 @@
 using json = nlohmann::json;
 
 // Some rules are turned off because some thigs is not learned at this point, or requires a lot of time to refactor.
-// NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 
-const int BOMB_CHAR_COUNT = 12;
 const int MAX_STEPS = 10000;
 const float GRAVITY = 9.81f;  // gravity
 
@@ -67,7 +66,7 @@ struct Coord {
 };
 
 struct DroneConfig {
-  char ammoName[BOMB_CHAR_COUNT];
+  std::string ammoName;
   Coord startPos;
   float altitude;
   float initialDir;
@@ -81,10 +80,10 @@ struct DroneConfig {
 };
 
 struct BombParams {
-  char name[BOMB_CHAR_COUNT];
-  float mass;
-  float drag;
-  float lift;
+  std::string name;
+  float mass = 0.0f;
+  float drag = 0.0f;
+  float lift = 0.0f;
 };
 
 struct SimStep {
@@ -407,9 +406,7 @@ private:
       json data;
       config >> data;
 
-      const std::string tmp = data["ammo"].get<std::string>();
-      strncpy(droneConfig.ammoName, tmp.c_str(), BOMB_CHAR_COUNT);
-
+      droneConfig.ammoName = data["ammo"];
       droneConfig.startPos.x = data["drone"]["position"]["x"];
       droneConfig.startPos.y = data["drone"]["position"]["y"];
       droneConfig.altitude = data["drone"]["altitude"];
@@ -449,7 +446,7 @@ private:
 
     try {
       for (size_t i = 0; i < ammoCount; i++) {
-        strncpy(ammoList[i].name, ammoData[i]["name"].get<std::string>().c_str(), BOMB_CHAR_COUNT);
+        ammoList[i].name = ammoData[i]["name"];
         ammoList[i].mass = ammoData[i]["mass"];
         ammoList[i].drag = ammoData[i]["drag"];
         ammoList[i].lift = ammoData[i]["lift"];
@@ -461,7 +458,7 @@ private:
 
     for (size_t i = 0; i < ammoCount; i++) {
       const BombParams bomb = ammoList[i];
-      if (strcmp(droneConfig.ammoName, bomb.name) == 0) {
+      if (droneConfig.ammoName == bomb.name) {
         bombParams = bomb;
         found = true;
         break;
@@ -812,4 +809,4 @@ int main()
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
 // NOLINTEND(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
-// NOLINTEND(cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays, bugprone-easily-swappable-parameters)
+// NOLINTEND(bugprone-easily-swappable-parameters)
