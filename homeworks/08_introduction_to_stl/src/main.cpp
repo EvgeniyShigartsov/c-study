@@ -4,6 +4,7 @@
 #include <fstream>
 #include <cmath>
 #include <string>
+#include <map>
 #include "../third_party/json.hpp"
 
 #define ENABLE_LOG 1
@@ -435,37 +436,33 @@ private:
     ammoFile >> ammoData;
 
     const size_t ammoCount = ammoData.size();
-    auto* ammoList = new BombParams[ammoCount];
-    bool found = false;
+    std::map<std::string, BombParams> ammoMap;
 
     try {
       for (size_t i = 0; i < ammoCount; i++) {
-        ammoList[i].name = ammoData[i]["name"];
-        ammoList[i].mass = ammoData[i]["mass"];
-        ammoList[i].drag = ammoData[i]["drag"];
-        ammoList[i].lift = ammoData[i]["lift"];
+        const std::string ammoName = ammoData[i]["name"];
+        ammoMap[ammoName] = {
+          .name = ammoName,
+          .mass = ammoData[i]["mass"],
+          .drag = ammoData[i]["drag"],
+          .lift = ammoData[i]["lift"],
+        };
       }
     }
     catch (const json::exception& parseError) {
       LOG(bombParamsPath << " parse error: " << parseError.what());
     }
 
-    for (size_t i = 0; i < ammoCount; i++) {
-      const BombParams bomb = ammoList[i];
-      if (droneConfig.ammoName == bomb.name) {
-        bombParams = bomb;
-        found = true;
-        break;
-      }
-    }
+    auto it = ammoMap.find(droneConfig.ammoName);
 
-    if (!found) {
+    if (it == ammoMap.end()) {
       LOG("Invalid ammo_name: " << droneConfig.ammoName);
+      return false;
     }
 
-    delete[] ammoList;
-    ammoList = nullptr;
-    return found;
+    bombParams = it->second;
+
+    return true;
   }
 
 public:
