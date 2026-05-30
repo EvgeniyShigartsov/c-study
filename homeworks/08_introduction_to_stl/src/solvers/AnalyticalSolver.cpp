@@ -2,6 +2,7 @@
 #include "../../include/Types.hpp"
 #include "../../include/Logger.hpp"
 #include "../../include/interfaces/IBallisticSolver.hpp"
+#include "../../include/MathUtils.hpp"
 
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class AnalyticalSolver : public IBallisticSolver {
