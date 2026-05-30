@@ -1,8 +1,8 @@
-#include "../../include/config/ComponentFactory.hpp"
-#include "../../include/config/FileConfigLoader.hpp"
-#include "../../include/Types.hpp"
-#include "../../include/providers/JsonTargetProvider.hpp"
-#include "../../include/solvers/AnalyticalSolver.hpp"
+#include "config/ComponentFactory.hpp"
+#include "config/FileConfigLoader.hpp"
+#include "Types.hpp"
+#include "providers/JsonTargetProvider.hpp"
+#include "solvers/AnalyticalSolver.hpp"
 
 // NOLINTBEGIN(cppcoreguidelines-owning-memory)
 

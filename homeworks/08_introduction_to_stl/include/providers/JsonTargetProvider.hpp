@@ -1,6 +1,6 @@
 #pragma once
-#include "../Types.hpp"
-#include "../interfaces/ITargetProvider.hpp"
+#include "Types.hpp"
+#include "interfaces/ITargetProvider.hpp"
 #include <vector>
 
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
@@ -18,8 +18,8 @@ public:
   JsonTargetProvider(const std::string& pathToConfig, const DroneConfig& droneConfig);
 
   Target getTarget(const float simCurrentTime, const int targetIndex) override;
-  int getTargetCount() override { return TARGETS_COUNT; }
-  bool isLoadSucces() override { return isSuccesFullyLoaded; }
+  int getTargetCount() override;
+  bool isLoadSucces() override;
 
-  virtual ~JsonTargetProvider() = default;
+  virtual ~JsonTargetProvider();
 };

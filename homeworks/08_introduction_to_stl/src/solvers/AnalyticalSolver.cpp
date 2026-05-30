@@ -1,8 +1,8 @@
 #pragma once
-#include "../../include/Types.hpp"
-#include "../../include/Logger.hpp"
-#include "../../include/interfaces/IBallisticSolver.hpp"
-#include "../../include/MathUtils.hpp"
+#include "Types.hpp"
+#include "Logger.hpp"
+#include "interfaces/IBallisticSolver.hpp"
+#include "MathUtils.hpp"
 
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class AnalyticalSolver : public IBallisticSolver {

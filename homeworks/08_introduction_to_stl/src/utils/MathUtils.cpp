@@ -1,8 +1,8 @@
 #include <cstring>
 #include <cmath>
 #include <iostream>
-#include "../../include/MathUtils.hpp"
-#include "../../include/Logger.hpp"
+#include "MathUtils.hpp"
+#include "Logger.hpp"
 
 // NOLINTBEGIN(readability-identifier-length)
 

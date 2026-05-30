@@ -1,10 +1,10 @@
 #pragma once
-#include "../../include/Types.hpp"
-#include "../../include/Logger.hpp"
-#include "../../include/interfaces/IConfigLoader.hpp"
-#include "../../third_party/json.hpp"
 #include <fstream>
 #include <iostream>
+#include "Types.hpp"
+#include "Logger.hpp"
+#include "interfaces/IConfigLoader.hpp"
+#include "third_party/json.hpp"
 
 using json = nlohmann::json;
 

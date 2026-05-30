@@ -1,6 +1,5 @@
 #include <cstring>
-#include "../include/types.hpp"
-#include "../include/Logger.hpp"
+#include "Types.hpp"
 
 // NOLINTBEGIN(readability-identifier-length)
 

@@ -2,12 +2,11 @@
 #include <fstream>
 #include <cmath>
 #include <string>
-#include <iostream>
-#include "../../third_party/json.hpp"
-#include "../../include/Types.hpp"
-#include "../../include/Logger.hpp"
-#include "../../include/interfaces/ITargetProvider.hpp"
-#include "../../include/MathUtils.hpp"
+#include "third_party/json.hpp"
+#include "Types.hpp"
+#include "Logger.hpp"
+#include "interfaces/ITargetProvider.hpp"
+#include "MathUtils.hpp"
 
 using json = nlohmann::json;
 
