@@ -302,23 +302,12 @@ void writeSimulationJson(const int totalSteps, const SimStep* steps)
 class JsonTargetProvider : public ITargetProvider {
 private:
   bool isSuccesFullyLoaded = false;
-  Coord** targetsInTime = nullptr;
+  std::vector<std::vector<Coord>> targetsInTime;
+
   int TARGETS_COUNT = 0;
   int TARGET_MOVES_COUNT = 0;
   float arrayTimeStep = 0.0f;
   float simTimeStep = 0.0f;
-
-  void cleanup()
-  {
-    if (targetsInTime != nullptr) {
-      for (int i = 0; i < TARGETS_COUNT; i++) {
-        delete[] targetsInTime[i];
-      }
-      delete[] targetsInTime;
-
-      targetsInTime = nullptr;
-    }
-  }
 
 public:
   JsonTargetProvider(const std::string& pathToConfig, const DroneConfig& droneConfig)
@@ -338,21 +327,26 @@ public:
     TARGETS_COUNT = targetsData["targetCount"];
     TARGET_MOVES_COUNT = targetsData["timeSteps"];
 
-    targetsInTime = new Coord*[TARGETS_COUNT];
+    targetsInTime.reserve(TARGETS_COUNT);
 
     try {
       for (int target = 0; target < TARGETS_COUNT; target++) {
-        targetsInTime[target] = new Coord[TARGET_MOVES_COUNT];
+        std::vector<Coord> targetInTime;
+        targetInTime.reserve(TARGET_MOVES_COUNT);
+
         for (int move = 0; move < TARGET_MOVES_COUNT; move++) {
-          targetsInTime[target][move].x = targetsData["targets"][target]["positions"][move]["x"];
-          targetsInTime[target][move].y = targetsData["targets"][target]["positions"][move]["y"];
+          targetInTime.push_back({
+            .x = targetsData["targets"][target]["positions"][move]["x"],
+            .y = targetsData["targets"][target]["positions"][move]["y"],
+          });
         }
+
+        targetsInTime.push_back(targetInTime);
       }
       isSuccesFullyLoaded = true;
     }
     catch (const json::exception& parseError) {
       LOG("targets.json parse error: " << parseError.what());
-      cleanup();
     }
   }
 
@@ -375,7 +369,7 @@ public:
   int getTargetCount() override { return TARGETS_COUNT; }
   bool isLoadSucces() override { return isSuccesFullyLoaded; }
 
-  virtual ~JsonTargetProvider() { cleanup(); }
+  virtual ~JsonTargetProvider() = default;
 };
 
 class AnalyticalSolver : public IBallisticSolver {
