@@ -4,11 +4,11 @@
 #include <fstream>
 #include <cmath>
 #include <string>
-#include <map>
 #include "../third_party/json.hpp"
 #include "../include/types.hpp"
 #include "../include/Logger.hpp"
 #include "../include/MathUtils.hpp"
+#include "../include/config/ComponentFactory.hpp"
 
 using json = nlohmann::json;
 
@@ -20,32 +20,6 @@ using json = nlohmann::json;
 
 const int MAX_STEPS = 10000;
 const float GRAVITY = 9.81f;  // gravity
-
-enum class SolverType { ANALYTICAL };
-enum class ProviderType { JSON };
-enum class LoaderType { FILE };
-
-class ITargetProvider {
-public:
-  virtual int getTargetCount() = 0;
-  virtual Target getTarget(const float simCurrentTime, const int targetIndex) = 0;
-  virtual bool isLoadSucces() = 0;
-  virtual ~ITargetProvider() = default;
-};
-
-class IBallisticSolver {
-public:
-  virtual Coord solve(const Coord targetCoord, const Coord droneCoord, const float h) = 0;
-  virtual ~IBallisticSolver() = default;
-};
-
-class IConfigLoader {
-public:
-  virtual bool load(const std::string& droneConfigPath, const std::string& bombParamsPath) = 0;
-  virtual DroneConfig getConfig() = 0;
-  virtual BombParams getAmmoParams() = 0;
-  virtual ~IConfigLoader() = default;
-};
 
 void writeSimulation(const std::vector<float>& droneXHistory,
                      const std::vector<float>& droneYHistory,
@@ -109,189 +83,6 @@ void writeSimulationJson(const std::vector<SimStep>& stepsLog)
   std::ofstream outJsonFile("simulation.json");
   outJsonFile << out.dump(2);
 }
-
-class JsonTargetProvider : public ITargetProvider {
-private:
-  bool isSuccesFullyLoaded = false;
-  std::vector<std::vector<Coord>> targetsInTime;
-
-  int TARGETS_COUNT = 0;
-  int TARGET_MOVES_COUNT = 0;
-  float arrayTimeStep = 0.0f;
-  float simTimeStep = 0.0f;
-
-public:
-  JsonTargetProvider(const std::string& pathToConfig, const DroneConfig& droneConfig)
-    : arrayTimeStep(droneConfig.arrayTimeStep)
-    , simTimeStep(droneConfig.simTimeStep)
-  {
-    std::ifstream targetsFile(pathToConfig);
-
-    if (!targetsFile.is_open()) {
-      LOG("targets.json was not found.");
-      return;
-    }
-
-    json targetsData;
-    targetsFile >> targetsData;
-
-    TARGETS_COUNT = targetsData["targetCount"];
-    TARGET_MOVES_COUNT = targetsData["timeSteps"];
-
-    targetsInTime.reserve(TARGETS_COUNT);
-
-    try {
-      for (int target = 0; target < TARGETS_COUNT; target++) {
-        std::vector<Coord> targetInTime;
-        targetInTime.reserve(TARGET_MOVES_COUNT);
-
-        for (int move = 0; move < TARGET_MOVES_COUNT; move++) {
-          targetInTime.push_back({
-            .x = targetsData["targets"][target]["positions"][move]["x"],
-            .y = targetsData["targets"][target]["positions"][move]["y"],
-          });
-        }
-
-        targetsInTime.push_back(std::move(targetInTime));
-      }
-      isSuccesFullyLoaded = true;
-    }
-    catch (const json::exception& parseError) {
-      LOG("targets.json parse error: " << parseError.what());
-    }
-  }
-
-  Target getTarget(const float simCurrentTime, const int targetIndex) override
-  {
-    const InterpolationIndex currentIndex = getInterpolationIndex(simCurrentTime, arrayTimeStep, TARGET_MOVES_COUNT);
-
-    const Coord targetCurrentXY =
-      interpolatePos(currentIndex.frac, targetsInTime[targetIndex][currentIndex.idx], targetsInTime[targetIndex][currentIndex.next]);
-
-    // 2. Обчислити швидкість цілі (targetVx, targetVy) через кінцеві різниці
-    const InterpolationIndex nextIndex = getInterpolationIndex(simCurrentTime + simTimeStep, arrayTimeStep, TARGET_MOVES_COUNT);
-
-    const Coord targetNextXY =
-      interpolatePos(nextIndex.frac, targetsInTime[targetIndex][nextIndex.idx], targetsInTime[targetIndex][nextIndex.next]);
-    const Coord targetVelocity = (targetNextXY - targetCurrentXY) / simTimeStep;
-
-    return {.pos = targetCurrentXY, .velocity = targetVelocity};
-  }
-  int getTargetCount() override { return TARGETS_COUNT; }
-  bool isLoadSucces() override { return isSuccesFullyLoaded; }
-
-  virtual ~JsonTargetProvider() = default;
-};
-
-class AnalyticalSolver : public IBallisticSolver {
-public:
-  Coord solve(const Coord targetCoord, const Coord droneCoord, const float h) override
-  {
-    const Coord delta = targetCoord - droneCoord;
-    return targetCoord - normalizeCoord(delta) * h;
-  }
-  virtual ~AnalyticalSolver() = default;
-};
-
-class FileConfigLoader : public IConfigLoader {
-private:
-  DroneConfig droneConfig{};
-  BombParams bombParams{};
-
-  bool readDroneConfig(const std::string& pathToConfig)
-  {
-    std::ifstream config(pathToConfig);
-
-    if (!config.is_open()) {
-      LOG("drone config file not found. Given path: " << pathToConfig);
-      return false;
-    }
-
-    try {
-      json data;
-      config >> data;
-
-      droneConfig.ammoName = data["ammo"];
-      droneConfig.startPos.x = data["drone"]["position"]["x"];
-      droneConfig.startPos.y = data["drone"]["position"]["y"];
-      droneConfig.altitude = data["drone"]["altitude"];
-      droneConfig.initialDir = data["drone"]["initialDirection"];
-      droneConfig.v0 = data["drone"]["attackSpeed"];
-      droneConfig.accelerationPath = data["drone"]["accelerationPath"];
-      droneConfig.arrayTimeStep = data["targetArrayTimeStep"];
-      droneConfig.simTimeStep = data["simulation"]["timeStep"];
-      droneConfig.hitRadius = data["simulation"]["hitRadius"];
-      droneConfig.angularSpeed = data["drone"]["angularSpeed"];
-      droneConfig.turnThreshold = data["drone"]["turnThreshold"];
-    }
-    catch (const json::exception& parseError) {
-      LOG("config.json parse error: " << parseError.what());
-      return false;
-    }
-    config.close();
-
-    return true;
-  }
-
-  bool readBombParams(const std::string& bombParamsPath)
-  {
-    std::ifstream ammoFile(bombParamsPath);
-
-    if (!ammoFile.is_open()) {
-      LOG("bomb params file not found. Given path: " << bombParamsPath);
-      return false;
-    }
-
-    json ammoData;
-    ammoFile >> ammoData;
-
-    std::map<std::string, BombParams> ammoMap;
-
-    try {
-      for (const auto& item : ammoData) {
-        const std::string ammoName = item["name"];
-        ammoMap[ammoName] = {
-          .name = ammoName,
-          .mass = item["mass"],
-          .drag = item["drag"],
-          .lift = item["lift"],
-        };
-      }
-    }
-    catch (const json::exception& parseError) {
-      LOG(bombParamsPath << " parse error: " << parseError.what());
-    }
-
-    auto it = ammoMap.find(droneConfig.ammoName);
-
-    if (it == ammoMap.end()) {
-      LOG("Invalid ammo_name: " << droneConfig.ammoName);
-      return false;
-    }
-
-    bombParams = it->second;
-
-    return true;
-  }
-
-public:
-  bool load(const std::string& pathToConfig, const std::string& bombParamsPath) override
-  {
-    const bool isConfigLoadOk = readDroneConfig(pathToConfig);
-    const bool isBombParamsLoadOk = readBombParams(bombParamsPath);
-
-    if (isConfigLoadOk && isBombParamsLoadOk) {
-      LOG("Config loaded: speed=" << droneConfig.v0);
-      LOG("Ammo found: " << bombParams.name);
-    }
-
-    return isConfigLoadOk && isBombParamsLoadOk;
-  }
-
-  DroneConfig getConfig() override { return droneConfig; }
-  BombParams getAmmoParams() override { return bombParams; }
-  virtual ~FileConfigLoader() = default;
-};
 
 class MissionProcessor {
 private:
@@ -519,36 +310,6 @@ public:
   std::vector<SimStep> getStepsLog() { return stepsLog; }
   virtual ~MissionProcessor() = default;
 };
-
-IConfigLoader* createLoader(LoaderType type)
-{
-  switch (type) {
-    case LoaderType::FILE:
-      return new FileConfigLoader;
-    default:
-      return nullptr;
-  }
-}
-
-IBallisticSolver* createSolver(SolverType type)
-{
-  switch (type) {
-    case SolverType::ANALYTICAL:
-      return new AnalyticalSolver;
-    default:
-      return nullptr;
-  }
-}
-
-ITargetProvider* createProvider(ProviderType type, const char* param, const DroneConfig& droneConfig)
-{
-  switch (type) {
-    case ProviderType::JSON:
-      return new JsonTargetProvider{param, droneConfig};
-    default:
-      return nullptr;
-  }
-}
 
 int main()
 {
