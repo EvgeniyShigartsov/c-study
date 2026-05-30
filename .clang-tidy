@@ -17,6 +17,7 @@ Checks: >
   -readability-function-cognitive-complexity,
   -readability-identifier-naming,
   -readability-magic-numbers,
+  -bugprone-easily-swappable-parameters,
   misc-unused-using-decls,
 
 CheckOptions:
