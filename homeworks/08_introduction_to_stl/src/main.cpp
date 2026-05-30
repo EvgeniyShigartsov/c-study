@@ -235,11 +235,11 @@ float getDirectionFromTo(const Coord& from, const Coord& to)
   return atan2f(to.y - from.y, to.x - from.x);
 }
 
-void writeSimulation(const float droneXHistory[MAX_STEPS],
-                     const float droneYHistory[MAX_STEPS],
-                     const float droneDirHistory[MAX_STEPS],
-                     const DroneState droneStateHistory[MAX_STEPS],
-                     const int droneSelectedTargetHistory[MAX_STEPS],
+void writeSimulation(std::vector<float> droneXHistory,
+                     std::vector<float> droneYHistory,
+                     std::vector<float> droneDirHistory,
+                     std::vector<DroneState> droneStateHistory,
+                     std::vector<int> droneSelectedTargetHistory,
                      const int steps)
 {
   std::ofstream simulation("simulation.txt");
@@ -770,20 +770,20 @@ int main()
   }
 
   // Історія для зворотньої сумісності з .txt результатом симуляції.
-  float droneXHistory[MAX_STEPS] = {};
-  float droneYHistory[MAX_STEPS] = {};
-  float droneDirHistory[MAX_STEPS] = {};
-  DroneState droneStateHistory[MAX_STEPS] = {};
-  int droneSelectedTargetHistory[MAX_STEPS] = {};
+  std::vector<float> droneXHistory;
+  std::vector<float> droneYHistory;
+  std::vector<float> droneDirHistory;
+  std::vector<DroneState> droneStateHistory;
+  std::vector<int> droneSelectedTargetHistory;
 
   while (missionProcessor.hasNext()) {
     const SimStep stepResult = missionProcessor.step();
 
-    droneXHistory[stepResult.step] = stepResult.pos.x;
-    droneYHistory[stepResult.step] = stepResult.pos.y;
-    droneDirHistory[stepResult.step] = stepResult.direction;
-    droneStateHistory[stepResult.step] = stepResult.state;
-    droneSelectedTargetHistory[stepResult.step] = stepResult.targetIdx;
+    droneXHistory.push_back(stepResult.pos.x);
+    droneYHistory.push_back(stepResult.pos.y);
+    droneDirHistory.push_back(stepResult.direction);
+    droneStateHistory.push_back(stepResult.state);
+    droneSelectedTargetHistory.push_back(stepResult.targetIdx);
   }
 
   const MissionLog missionLog = missionProcessor.getStepsLog();
