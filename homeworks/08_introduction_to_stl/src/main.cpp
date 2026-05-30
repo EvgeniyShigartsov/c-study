@@ -138,11 +138,6 @@ struct Target {
   Coord velocity;
 };
 
-struct MissionLog {
-  int stepsCount;
-  SimStep* stepsLog;
-};
-
 class ITargetProvider {
 public:
   virtual int getTargetCount() = 0;
@@ -236,32 +231,32 @@ float getDirectionFromTo(const Coord& from, const Coord& to)
   return atan2f(to.y - from.y, to.x - from.x);
 }
 
-void writeSimulation(std::vector<float> droneXHistory,
-                     std::vector<float> droneYHistory,
-                     std::vector<float> droneDirHistory,
-                     std::vector<DroneState> droneStateHistory,
-                     std::vector<int> droneSelectedTargetHistory,
-                     const int steps)
+void writeSimulation(const std::vector<float>& droneXHistory,
+                     const std::vector<float>& droneYHistory,
+                     const std::vector<float>& droneDirHistory,
+                     const std::vector<DroneState>& droneStateHistory,
+                     const std::vector<int>& droneSelectedTargetHistory,
+                     const size_t steps)
 {
   std::ofstream simulation("simulation.txt");
   simulation << steps << std::endl;
 
-  for (int i = 0; i < steps; i++) {
+  for (size_t i = 0; i < steps; i++) {
     simulation << droneXHistory[i] << ' ' << droneYHistory[i] << ' ';
   }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++) {
+  for (size_t i = 0; i < steps; i++) {
     simulation << droneDirHistory[i] << ' ';
   }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++) {
+  for (size_t i = 0; i < steps; i++) {
     simulation << droneStateHistory[i] << ' ';
   }
   simulation << std::endl;
 
-  for (int i = 0; i < steps; i++) {
+  for (size_t i = 0; i < steps; i++) {
     simulation << droneSelectedTargetHistory[i] << ' ';
   }
   simulation << std::endl;
@@ -274,15 +269,14 @@ json toJsonXY(const Coord& coord)
   return {{"x", coord.x}, {"y", coord.y}};
 }
 
-void writeSimulationJson(const int totalSteps, const SimStep* steps)
+void writeSimulationJson(const std::vector<SimStep>& stepsLog)
 {
   json out;
 
-  out["totalSteps"] = totalSteps;
+  out["totalSteps"] = stepsLog.size();
   out["steps"] = json::array();
 
-  for (int i = 0; i < totalSteps; i++) {
-    const SimStep& step = steps[i];
+  for (const SimStep& step : stepsLog) {
     json outStep;
 
     outStep["position"] = toJsonXY(step.pos);
@@ -435,17 +429,16 @@ private:
     json ammoData;
     ammoFile >> ammoData;
 
-    const size_t ammoCount = ammoData.size();
     std::map<std::string, BombParams> ammoMap;
 
     try {
-      for (size_t i = 0; i < ammoCount; i++) {
-        const std::string ammoName = ammoData[i]["name"];
+      for (const auto& item : ammoData) {
+        const std::string ammoName = item["name"];
         ammoMap[ammoName] = {
           .name = ammoName,
-          .mass = ammoData[i]["mass"],
-          .drag = ammoData[i]["drag"],
-          .lift = ammoData[i]["lift"],
+          .mass = item["mass"],
+          .drag = item["drag"],
+          .lift = item["lift"],
         };
       }
     }
@@ -496,13 +489,14 @@ private:
   float droneAcceleration = 0.0f;
   int targetsCount = 0;
 
-  SimStep* stepsLog = new SimStep[MAX_STEPS];
+  std::vector<SimStep> stepsLog;
 
 public:
   MissionProcessor(ITargetProvider* provider, IBallisticSolver* solver)
     : targetProvider(provider)
     , ballisticSolver(solver)
   {
+    stepsLog.reserve(MAX_STEPS);
   }
   [[nodiscard]] bool init(IConfigLoader* configLoader)
   {
@@ -696,7 +690,7 @@ public:
       .step = sim.step,
     };
 
-    stepsLog[sim.step] = stepResult;
+    stepsLog.push_back(stepResult);
 
     sim.prevSelectedTargetIndex = sim.selectedTargetIndex;
     sim.CURRENT_TIME += dc.simTimeStep;
@@ -706,12 +700,8 @@ public:
   }
   void changeSolver(IBallisticSolver* solver) { ballisticSolver = solver; }
   void reset() { sim = Simulation(dc.startPos, dc.initialDir, dc.simTimeStep); }
-  MissionLog getStepsLog() { return {.stepsCount = sim.step, .stepsLog = stepsLog}; }
-  virtual ~MissionProcessor()
-  {
-    delete[] stepsLog;
-    stepsLog = nullptr;
-  };
+  std::vector<SimStep> getStepsLog() { return stepsLog; }
+  virtual ~MissionProcessor() = default;
 };
 
 IConfigLoader* createLoader(LoaderType type)
@@ -777,13 +767,13 @@ int main()
     droneSelectedTargetHistory.push_back(stepResult.targetIdx);
   }
 
-  const MissionLog missionLog = missionProcessor.getStepsLog();
+  const std::vector<SimStep> stepsLog = missionProcessor.getStepsLog();
 
-  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, missionLog.stepsCount);
+  writeSimulation(droneXHistory, droneYHistory, droneDirHistory, droneStateHistory, droneSelectedTargetHistory, stepsLog.size());
 
-  writeSimulationJson(missionLog.stepsCount, missionLog.stepsLog);
+  writeSimulationJson(stepsLog);
 
-  LOG("Simulation complete. Steps: " << missionLog.stepsCount);
+  LOG("Simulation complete. Steps: " << stepsLog.size());
 
   missionProcessor.reset();
 
