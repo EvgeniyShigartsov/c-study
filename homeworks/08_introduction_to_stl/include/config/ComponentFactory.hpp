@@ -9,4 +9,4 @@ enum class LoaderType { FILE };
 
 IConfigLoader* createLoader(LoaderType type);
 IBallisticSolver* createSolver(SolverType type);
-ITargetProvider* createProvider(ProviderType type, const char* param, const DroneConfig& droneConfig);
+ITargetProvider* createProvider(ProviderType type, const std::string& pathToConfig, const DroneConfig& droneConfig);

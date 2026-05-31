@@ -9,12 +9,6 @@
 
 using json = nlohmann::json;
 
-// Some rules are turned off because some thigs is not learned at this point, or requires a lot of time to refactor.
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
-// NOLINTBEGIN(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
-// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
-// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
-
 void writeSimulation(const std::vector<float>& droneXHistory,
                      const std::vector<float>& droneYHistory,
                      const std::vector<float>& droneDirHistory,
@@ -121,17 +115,15 @@ int main()
 
   missionProcessor.reset();
 
+  // Rule are turned off because some thigs is not learned at this point.
+  // NOLINTBEGIN(cppcoreguidelines-owning-memory)
   delete configLoader;
   delete targetProvider;
   delete solver;
+  // NOLINTEND(cppcoreguidelines-owning-memory)
   configLoader = nullptr;
   targetProvider = nullptr;
   solver = nullptr;
 
   return 0;
 }
-
-// NOLINTEND(cppcoreguidelines-special-member-functions)
-// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic, readability-identifier-length)
-// NOLINTEND(cppcoreguidelines-pro-bounds-array-to-pointer-decay, cppcoreguidelines-owning-memory)
-// NOLINTEND(bugprone-easily-swappable-parameters)

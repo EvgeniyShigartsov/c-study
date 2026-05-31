@@ -1,4 +1,5 @@
 #include "config/ComponentFactory.hpp"
+#include <string>
 #include "config/FileConfigLoader.hpp"
 #include "types.hpp"
 #include "providers/JsonTargetProvider.hpp"
@@ -26,11 +27,11 @@ IBallisticSolver* createSolver(SolverType type)
   }
 }
 
-ITargetProvider* createProvider(ProviderType type, const char* param, const DroneConfig& droneConfig)
+ITargetProvider* createProvider(ProviderType type, const std::string& pathToConfig, const DroneConfig& droneConfig)
 {
   switch (type) {
     case ProviderType::JSON:
-      return new JsonTargetProvider{param, droneConfig};
+      return new JsonTargetProvider{pathToConfig, droneConfig};
     default:
       return nullptr;
   }
