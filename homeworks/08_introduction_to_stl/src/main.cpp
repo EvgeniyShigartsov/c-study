@@ -83,10 +83,10 @@ int main()
 {
   IConfigLoader* configLoader = createLoader(LoaderType::FILE);
   const bool isConfigLoadSuccess =
-    configLoader->load("homeworks/08_introduction_to_stl/config.json", "homeworks/08_introduction_to_stl/ammo.json");
+    configLoader->load("homeworks/08_introduction_to_stl/data/config.json", "homeworks/08_introduction_to_stl/data/ammo.json");
 
   ITargetProvider* targetProvider =
-    createProvider(ProviderType::JSON, "homeworks/08_introduction_to_stl/targets.json", configLoader->getConfig());
+    createProvider(ProviderType::JSON, "homeworks/08_introduction_to_stl/data/targets.json", configLoader->getConfig());
   IBallisticSolver* solver = createSolver(SolverType::ANALYTICAL);
 
   MissionProcessor missionProcessor{targetProvider, solver};
