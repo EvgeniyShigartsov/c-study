@@ -9,17 +9,26 @@ Checks: >
   modernize-*,
   performance-*,
   readability-*,
+  -readability-uppercase-literal-suffix,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
   -cppcoreguidelines-avoid-magic-numbers,
   -modernize-use-trailing-return-type,
   -readability-avoid-const-params-in-decls,
   -readability-function-cognitive-complexity,
   -readability-identifier-naming,
   -readability-magic-numbers,
+  -bugprone-easily-swappable-parameters,
   misc-unused-using-decls,
+
+CheckOptions:
+  - key: readability-identifier-length.MinimumParameterNameLength
+    value: '2'
+  - key: readability-identifier-length.MinimumVariableNameLength
+    value: '2'
 
 # Аналізувати лише код домашніх робіт і типові source/include директорії,
 # а не системні headers або сторонні бібліотеки.
-HeaderFilterRegex: '(^|/)(homework_[0-9]+|include|src)/'
+HeaderFilterRegex: '.*/homeworks/[^/]+/(include|src|tests)/.*'
 
 # Зауваження static analyzer мають ламати перевірку: це найчастіше реальні баги.
 # Решта checks лишаються warning-ами, щоб clang-tidy був навчальним

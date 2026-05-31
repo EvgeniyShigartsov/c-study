@@ -32,3 +32,6 @@ cmake
 clang-format
 cmake-format
 ninja-build
+
+# Користувацькі
+tree
