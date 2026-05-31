@@ -1,6 +1,6 @@
 #include "config/ComponentFactory.hpp"
 #include "config/FileConfigLoader.hpp"
-#include "Types.hpp"
+#include "types.hpp"
 #include "providers/JsonTargetProvider.hpp"
 #include "solvers/AnalyticalSolver.hpp"
 

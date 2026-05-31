@@ -1,5 +1,5 @@
 #include <vector>
-#include "Types.hpp"
+#include "types.hpp"
 #include "MathUtils.hpp"
 #include "Logger.hpp"
 #include "interfaces/IBallisticSolver.hpp"

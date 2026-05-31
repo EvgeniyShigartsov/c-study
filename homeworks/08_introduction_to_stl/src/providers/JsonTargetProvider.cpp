@@ -1,6 +1,6 @@
 #include <fstream>
 #include "third_party/json.hpp"
-#include "Types.hpp"
+#include "types.hpp"
 #include "Logger.hpp"
 #include "providers/JsonTargetProvider.hpp"
 #include "MathUtils.hpp"

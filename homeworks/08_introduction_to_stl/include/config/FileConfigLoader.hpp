@@ -1,5 +1,5 @@
 #pragma once
-#include "Types.hpp"
+#include "types.hpp"
 #include "interfaces/IConfigLoader.hpp"
 
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)

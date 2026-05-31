@@ -1,6 +1,6 @@
 #pragma once
 #include <vector>
-#include "Types.hpp"
+#include "types.hpp"
 #include "MathUtils.hpp"
 #include "interfaces/IBallisticSolver.hpp"
 #include "interfaces/ITargetProvider.hpp"

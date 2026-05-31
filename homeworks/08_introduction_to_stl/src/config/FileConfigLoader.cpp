@@ -1,6 +1,6 @@
 #include <fstream>
 #include <iostream>
-#include "Types.hpp"
+#include "types.hpp"
 #include "Logger.hpp"
 #include "third_party/json.hpp"
 #include "config//FileConfigLoader.hpp"

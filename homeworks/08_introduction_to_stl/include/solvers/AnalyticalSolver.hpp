@@ -1,5 +1,5 @@
 #pragma once
-#include "Types.hpp"
+#include "types.hpp"
 #include "interfaces/IBallisticSolver.hpp"
 
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)

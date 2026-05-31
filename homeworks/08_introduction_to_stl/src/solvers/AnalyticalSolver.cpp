@@ -1,4 +1,4 @@
-#include "Types.hpp"
+#include "types.hpp"
 #include "solvers/AnalyticalSolver.hpp"
 #include "MathUtils.hpp"
 
